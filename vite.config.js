@@ -12,11 +12,13 @@ export default defineConfig({
     // Code-split by route to avoid a single 900 kB bundle
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-charts': ['recharts', 'react-is'],
-          'vendor-map': ['leaflet', 'react-leaflet', 'react-leaflet-cluster'],
-          'vendor-dnd': ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-dom') || id.includes('react-router') || (id.includes('react') && !id.includes('recharts') && !id.includes('react-is') && !id.includes('react-leaflet'))) return 'vendor-react';
+            if (id.includes('recharts') || id.includes('react-is')) return 'vendor-charts';
+            if (id.includes('leaflet')) return 'vendor-map';
+            if (id.includes('@dnd-kit')) return 'vendor-dnd';
+          }
         },
       },
     },
