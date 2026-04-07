@@ -10,30 +10,50 @@ export default function TripForm() {
   const navigate = useNavigate();
   const addTrip = useTripStore(s => s.addTrip);
   const updateTrip = useTripStore(s => s.updateTrip);
-  const loadTrip = useTripStore(s => s.loadTrip);
+  const loadTrips = useTripStore(s => s.loadTrips);
+  const trips = useTripStore(s => s.trips);
 
   const [form, setForm] = useState({
     destination: '', country: '', city: '', startDate: '', endDate: '',
     budget: '', imageUrl: '', notes: '', status: 'idea',
   });
   const [dateError, setDateError] = useState('');
+  const [loading, setLoading] = useState(!!id);
 
   const isEdit = !!id;
 
   useEffect(() => {
-    if (id) {
-      const trip = loadTrip(id);
-      if (trip) setForm({
-        destination: trip.destination || '', country: trip.country || '', city: trip.city || '',
-        startDate: trip.startDate || '', endDate: trip.endDate || '', budget: trip.budget || '',
-        imageUrl: trip.imageUrl || '', notes: trip.notes || '', status: trip.status || 'idea',
-      });
-    }
-  }, [id]);
+    if (!id) return;
+
+    const init = async () => {
+      setLoading(true);
+      // Look up in already-loaded trips first; fall back to fetching from Supabase
+      let trip = trips.find(t => t.id === id);
+      if (!trip) {
+        await loadTrips();
+        trip = useTripStore.getState().trips.find(t => t.id === id);
+      }
+      if (trip) {
+        setForm({
+          destination: trip.destination || '',
+          country: trip.country || '',
+          city: trip.city || '',
+          startDate: trip.startDate || '',
+          endDate: trip.endDate || '',
+          budget: trip.budget || '',
+          imageUrl: trip.imageUrl || '',
+          notes: trip.notes || '',
+          status: trip.status || 'idea',
+        });
+      }
+      setLoading(false);
+    };
+
+    init();
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleChange = (e) => {
     const updated = { ...form, [e.target.name]: e.target.value };
-    // Fix: validate that endDate is not before startDate
     if (updated.startDate && updated.endDate && updated.endDate < updated.startDate) {
       setDateError('La fecha de fin no puede ser anterior a la de inicio.');
     } else {
@@ -63,6 +83,16 @@ export default function TripForm() {
     }
     navigate('/');
   };
+
+  if (loading) {
+    return (
+      <div className="page-container" style={{ maxWidth: 700, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', padding: 80, color: 'var(--text-tertiary)' }}>
+          Cargando viaje...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container" style={{ maxWidth: 700, margin: '0 auto' }}>
@@ -106,14 +136,9 @@ export default function TripForm() {
             </div>
             <div className="form-group">
               <label className="form-label">Fecha fin</label>
-              <input
-                className="form-input"
-                type="date"
-                name="endDate"
-                value={form.endDate}
-                onChange={handleChange}
-                min={form.startDate || undefined}
-              />
+              <input className="form-input" type="date" name="endDate"
+                value={form.endDate} onChange={handleChange}
+                min={form.startDate || undefined} />
             </div>
           </div>
           {dateError && (
