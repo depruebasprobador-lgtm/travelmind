@@ -14,16 +14,18 @@ import ExpensesTab from '../components/trip/ExpensesTab';
 import MapTab from '../components/trip/MapTab';
 import ChecklistTab from '../components/trip/ChecklistTab';
 import DayPlanTab from '../components/trip/DayPlanTab';
+import RecommendationsTab from '../components/trip/RecommendationsTab';
 
 const TABS = [
-  { id: 'dayplan', label: '📅 Plan del día' },
-  { id: 'itinerary', label: 'Itinerario' },
-  { id: 'accommodation', label: 'Alojamiento' },
-  { id: 'transport', label: 'Transporte' },
-  { id: 'places', label: 'Lugares' },
-  { id: 'expenses', label: 'Gastos' },
-  { id: 'map', label: 'Mapa' },
-  { id: 'checklist', label: 'Checklist' },
+  { id: 'dayplan',         label: '📅 Plan del día' },
+  { id: 'itinerary',       label: 'Itinerario' },
+  { id: 'accommodation',   label: 'Alojamiento' },
+  { id: 'transport',       label: 'Transporte' },
+  { id: 'places',          label: 'Lugares' },
+  { id: 'recommendations', label: '🔍 Descubrir' },
+  { id: 'expenses',        label: 'Gastos' },
+  { id: 'map',             label: 'Mapa' },
+  { id: 'checklist',       label: 'Checklist' },
 ];
 
 export default function TripDetail() {
@@ -96,6 +98,7 @@ export default function TripDetail() {
       case 'accommodation': return <AccommodationTab trip={trip} />;
       case 'transport': return <TransportTab trip={trip} />;
       case 'places': return <PlacesTab trip={trip} />;
+      case 'recommendations': return <RecommendationsTab trip={trip} />;
       case 'expenses': return <ExpensesTab trip={trip} />;
       case 'map': return <MapTab trip={trip} />;
       case 'checklist': return <ChecklistTab trip={trip} />;
