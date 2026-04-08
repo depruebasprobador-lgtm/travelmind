@@ -69,37 +69,57 @@ export default function RecommendationsTab({ trip }) {
       const lat = parseFloat(geoData[0].lat);
       const lon = parseFloat(geoData[0].lon);
 
-      // 2. Overpass – single query, all categories, capped to avoid OOM on large cities
-      const overpassQuery = `
-[out:json][timeout:25][maxsize:16777216];
+      // 2. Overpass – two parallel requests to avoid union timeout on dense cities
+      const touristQuery = `
+[out:json][timeout:25];
 (
-  node["amenity"="restaurant"]["name"](around:1500,${lat},${lon});
-  node["amenity"="cafe"]["name"](around:1500,${lat},${lon});
-  node["tourism"="museum"]["name"](around:4000,${lat},${lon});
-  node["tourism"="viewpoint"]["name"](around:5000,${lat},${lon});
-  node["tourism"="monument"]["name"](around:5000,${lat},${lon});
-  node["tourism"="attraction"]["name"](around:3000,${lat},${lon});
-  node["historic"~"monument|castle|ruins|memorial"]["name"](around:5000,${lat},${lon});
+  node["tourism"="museum"]["name"](around:5000,${lat},${lon});
+  node["tourism"="viewpoint"]["name"](around:6000,${lat},${lon});
+  node["tourism"="monument"]["name"](around:6000,${lat},${lon});
+  node["tourism"="attraction"]["name"](around:4000,${lat},${lon});
+  node["historic"="castle"]["name"](around:6000,${lat},${lon});
+  node["historic"="memorial"]["name"](around:4000,${lat},${lon});
   node["leisure"="park"]["name"](around:2000,${lat},${lon});
 );
-out 150;`;
+out 100;`;
 
-      const overpassRes = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(overpassQuery)}`,
-      });
+      const foodQuery = `
+[out:json][timeout:20];
+(
+  node["amenity"="restaurant"]["name"](around:800,${lat},${lon});
+  node["amenity"="cafe"]["name"](around:800,${lat},${lon});
+);
+out 80;`;
 
-      const overpassText = await overpassRes.text();
-      if (overpassText.trimStart().startsWith('<')) {
+      const [touristRes, foodRes] = await Promise.all([
+        fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `data=${encodeURIComponent(touristQuery)}`,
+        }),
+        fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `data=${encodeURIComponent(foodQuery)}`,
+        }),
+      ]);
+
+      const touristText = await touristRes.text();
+      const foodText    = await foodRes.text();
+
+      const parseOverpass = (text) => {
+        if (text.trimStart().startsWith('<')) return [];
+        const data = JSON.parse(text);
+        if (data.remark && !data.elements?.length) return [];
+        return data.elements || [];
+      };
+
+      const allElements = [...parseOverpass(touristText), ...parseOverpass(foodText)];
+
+      const elements = allElements;
+      if (!elements.length) {
         throw new Error('El servicio de mapas está ocupado. Espera unos segundos y pulsa Actualizar.');
       }
-      const overpassData = JSON.parse(overpassText);
-      // Overpass returns a remark when a runtime error occurs (e.g. too many results)
-      if (overpassData.remark && !(overpassData.elements?.length)) {
-        throw new Error('El servicio de mapas está ocupado. Espera unos segundos y pulsa Actualizar.');
-      }
-      const elements = overpassData.elements || [];
 
       // Deduplicate by name, classify, cap at 120
       const seen = new Set();
