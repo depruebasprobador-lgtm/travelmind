@@ -90,7 +90,11 @@ out body;`;
         body: `data=${encodeURIComponent(overpassQuery)}`,
       });
 
-      const overpassData = await overpassRes.json();
+      const overpassText = await overpassRes.text();
+      if (overpassText.trimStart().startsWith('<')) {
+        throw new Error('El servicio de mapas está ocupado. Espera unos segundos y pulsa Actualizar.');
+      }
+      const overpassData = JSON.parse(overpassText);
       const elements = overpassData.elements || [];
 
       // Deduplicate by name, classify, cap at 120
