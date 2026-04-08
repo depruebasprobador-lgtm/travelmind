@@ -64,8 +64,8 @@ export default function TripDetail() {
 
   const totalSpent = (trip.expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
 
-  const handleDelete = () => {
-    deleteTripAction(id);
+  const handleDelete = async () => {
+    await deleteTripAction(id);
     navigate('/');
     toast('Viaje eliminado', 'info');
   };
