@@ -70,28 +70,27 @@ export default function RecommendationsTab({ trip }) {
       const lon = parseFloat(geoData[0].lon);
 
       // 2. Overpass – two parallel requests with bbox (faster than around for dense cities)
-      const d = 0.022; // ~2.4 km half-side
+      const d = 0.015; // ~1.7 km half-side
       const bbox = `${lat - d},${lon - d * 1.5},${lat + d},${lon + d * 1.5}`;
 
+      // Only 4 specific tourist types — park/memorial excluded (too many nodes in dense cities)
       const touristQuery = `
-[out:json][timeout:22][bbox:${bbox}];
+[out:json][timeout:18][bbox:${bbox}];
 (
   node["tourism"="museum"]["name"];
   node["tourism"="viewpoint"]["name"];
   node["tourism"="monument"]["name"];
   node["historic"="castle"]["name"];
-  node["historic"="memorial"]["name"];
-  node["leisure"="park"]["name"];
 );
-out 80;`;
+out 60;`;
 
       const foodQuery = `
-[out:json][timeout:20][bbox:${bbox}];
+[out:json][timeout:18][bbox:${bbox}];
 (
   node["amenity"="restaurant"]["name"];
   node["amenity"="cafe"]["name"];
 );
-out 80;`;
+out 60;`;
 
       // Try primary endpoint, fall back to mirror on 429/error
       const overpassFetch = async (query) => {
