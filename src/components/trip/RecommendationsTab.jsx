@@ -69,25 +69,27 @@ export default function RecommendationsTab({ trip }) {
       const lat = parseFloat(geoData[0].lat);
       const lon = parseFloat(geoData[0].lon);
 
-      // 2. Overpass – two parallel requests to avoid union timeout on dense cities
+      // 2. Overpass – two parallel requests with bbox (faster than around for dense cities)
+      const d = 0.022; // ~2.4 km half-side
+      const bbox = `${lat - d},${lon - d * 1.5},${lat + d},${lon + d * 1.5}`;
+
       const touristQuery = `
-[out:json][timeout:25];
+[out:json][timeout:22][bbox:${bbox}];
 (
-  node["tourism"="museum"]["name"](around:5000,${lat},${lon});
-  node["tourism"="viewpoint"]["name"](around:6000,${lat},${lon});
-  node["tourism"="monument"]["name"](around:6000,${lat},${lon});
-  node["tourism"="attraction"]["name"](around:4000,${lat},${lon});
-  node["historic"="castle"]["name"](around:6000,${lat},${lon});
-  node["historic"="memorial"]["name"](around:4000,${lat},${lon});
-  node["leisure"="park"]["name"](around:2000,${lat},${lon});
+  node["tourism"="museum"]["name"];
+  node["tourism"="viewpoint"]["name"];
+  node["tourism"="monument"]["name"];
+  node["historic"="castle"]["name"];
+  node["historic"="memorial"]["name"];
+  node["leisure"="park"]["name"];
 );
-out 100;`;
+out 80;`;
 
       const foodQuery = `
-[out:json][timeout:20];
+[out:json][timeout:20][bbox:${bbox}];
 (
-  node["amenity"="restaurant"]["name"](around:800,${lat},${lon});
-  node["amenity"="cafe"]["name"](around:800,${lat},${lon});
+  node["amenity"="restaurant"]["name"];
+  node["amenity"="cafe"]["name"];
 );
 out 80;`;
 
