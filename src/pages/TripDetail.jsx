@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Edit3, Copy, Archive, FileDown, Trash2, ArrowLeft, FileText } from 'lucide-react';
+import { Edit3, Copy, Archive, Trash2, ArrowLeft, FileText } from 'lucide-react';
 import useTripStore from '../data/store';
 import StatusBadge from '../components/StatusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -13,8 +13,10 @@ import PlacesTab from '../components/trip/PlacesTab';
 import ExpensesTab from '../components/trip/ExpensesTab';
 import MapTab from '../components/trip/MapTab';
 import ChecklistTab from '../components/trip/ChecklistTab';
+import DayPlanTab from '../components/trip/DayPlanTab';
 
 const TABS = [
+  { id: 'dayplan', label: '📅 Plan del día' },
   { id: 'itinerary', label: 'Itinerario' },
   { id: 'accommodation', label: 'Alojamiento' },
   { id: 'transport', label: 'Transporte' },
@@ -30,6 +32,7 @@ export default function TripDetail() {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState('itinerary');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [tabInitialized, setTabInitialized] = useState(false);
 
   const loadTrips = useTripStore(s => s.loadTrips);
   const loadTrip = useTripStore(s => s.loadTrip);
@@ -46,6 +49,17 @@ export default function TripDetail() {
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const trip = trips.find(t => t.id === id);
+
+  // Auto-select "Plan del día" if the trip is happening today
+  useEffect(() => {
+    if (!trip || tabInitialized) return;
+    const today = new Date().toISOString().split('T')[0];
+    if (trip.startDate && trip.endDate && today >= trip.startDate && today <= trip.endDate) {
+      setActiveTab('dayplan');
+    }
+    setTabInitialized(true);
+  }, [trip, tabInitialized]);
+
   if (!trip) return <div className="page-container"><p>Viaje no encontrado</p></div>;
 
   const totalSpent = (trip.expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
@@ -77,6 +91,7 @@ export default function TripDetail() {
 
   const renderTab = () => {
     switch (activeTab) {
+      case 'dayplan': return <DayPlanTab trip={trip} />;
       case 'itinerary': return <ItineraryTab trip={trip} />;
       case 'accommodation': return <AccommodationTab trip={trip} />;
       case 'transport': return <TransportTab trip={trip} />;
