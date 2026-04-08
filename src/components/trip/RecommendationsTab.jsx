@@ -91,21 +91,30 @@ out 100;`;
 );
 out 80;`;
 
-      const [touristRes, foodRes] = await Promise.all([
-        fetch('https://overpass-api.de/api/interpreter', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `data=${encodeURIComponent(touristQuery)}`,
-        }),
-        fetch('https://overpass-api.de/api/interpreter', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `data=${encodeURIComponent(foodQuery)}`,
-        }),
-      ]);
+      // Try primary endpoint, fall back to mirror on 429/error
+      const overpassFetch = async (query) => {
+        const endpoints = [
+          'https://overpass-api.de/api/interpreter',
+          'https://overpass.kumi.systems/api/interpreter',
+        ];
+        for (const endpoint of endpoints) {
+          try {
+            const res = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `data=${encodeURIComponent(query)}`,
+            });
+            if (res.status === 429) continue; // rate limited, try next
+            return res.text();
+          } catch { /* network error, try next */ }
+        }
+        return ''; // all endpoints failed
+      };
 
-      const touristText = await touristRes.text();
-      const foodText    = await foodRes.text();
+      const [touristText, foodText] = await Promise.all([
+        overpassFetch(touristQuery),
+        overpassFetch(foodQuery),
+      ]);
 
       const parseOverpass = (text) => {
         if (text.trimStart().startsWith('<')) return [];
