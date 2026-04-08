@@ -69,20 +69,20 @@ export default function RecommendationsTab({ trip }) {
       const lat = parseFloat(geoData[0].lat);
       const lon = parseFloat(geoData[0].lon);
 
-      // 2. Overpass – single query, all categories
+      // 2. Overpass – single query, all categories, capped to avoid OOM on large cities
       const overpassQuery = `
-[out:json][timeout:30];
+[out:json][timeout:25][maxsize:16777216];
 (
-  node["amenity"="restaurant"]["name"](around:3000,${lat},${lon});
-  node["amenity"="cafe"]["name"](around:3000,${lat},${lon});
-  node["tourism"="museum"]["name"](around:6000,${lat},${lon});
-  node["tourism"="viewpoint"]["name"](around:8000,${lat},${lon});
-  node["tourism"="monument"]["name"](around:8000,${lat},${lon});
-  node["tourism"="attraction"]["name"](around:5000,${lat},${lon});
-  node["historic"~"monument|castle|ruins|memorial"]["name"](around:8000,${lat},${lon});
-  node["leisure"="park"]["name"](around:4000,${lat},${lon});
+  node["amenity"="restaurant"]["name"](around:1500,${lat},${lon});
+  node["amenity"="cafe"]["name"](around:1500,${lat},${lon});
+  node["tourism"="museum"]["name"](around:4000,${lat},${lon});
+  node["tourism"="viewpoint"]["name"](around:5000,${lat},${lon});
+  node["tourism"="monument"]["name"](around:5000,${lat},${lon});
+  node["tourism"="attraction"]["name"](around:3000,${lat},${lon});
+  node["historic"~"monument|castle|ruins|memorial"]["name"](around:5000,${lat},${lon});
+  node["leisure"="park"]["name"](around:2000,${lat},${lon});
 );
-out body;`;
+out 150;`;
 
       const overpassRes = await fetch('https://overpass-api.de/api/interpreter', {
         method: 'POST',
@@ -95,6 +95,10 @@ out body;`;
         throw new Error('El servicio de mapas está ocupado. Espera unos segundos y pulsa Actualizar.');
       }
       const overpassData = JSON.parse(overpassText);
+      // Overpass returns a remark when a runtime error occurs (e.g. too many results)
+      if (overpassData.remark && !(overpassData.elements?.length)) {
+        throw new Error('El servicio de mapas está ocupado. Espera unos segundos y pulsa Actualizar.');
+      }
       const elements = overpassData.elements || [];
 
       // Deduplicate by name, classify, cap at 120
