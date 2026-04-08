@@ -145,6 +145,17 @@ const useTripStore = create((set, get) => ({
     await get().updateTrip(tripId, { itinerary });
   },
 
+  toggleActivityComplete: async (tripId, dayId, activityId) => {
+    const trip = get().trips.find(t => t.id === tripId);
+    if (!trip) return;
+    const itinerary = trip.itinerary.map(day =>
+      day.id === dayId
+        ? { ...day, activities: day.activities.map(a => a.id === activityId ? { ...a, completed: !a.completed } : a) }
+        : day
+    );
+    await get().updateTrip(tripId, { itinerary });
+  },
+
   reorderActivities: async (tripId, dayId, reorderedActivities) => {
     const trip = get().trips.find(t => t.id === tripId);
     if (!trip) return;
@@ -196,7 +207,7 @@ const useTripStore = create((set, get) => ({
 
   updateTransport: async (tripId, transportId, updates) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
+    if (! trip) return;
     await get().updateTrip(tripId, {
       transports: trip.transports.map(t => t.id === transportId ? { ...t, ...updates } : t),
     });
@@ -210,7 +221,7 @@ const useTripStore = create((set, get) => ({
     });
   },
 
-  // ── Places ────────────────────────────────────────────────────────────────
+  // ── Places ────────────────────────────────────────────────────────────
   addPlace: async (tripId, place) => {
     const trip = get().trips.find(t => t.id === tripId);
     if (!trip) return;
@@ -235,7 +246,7 @@ const useTripStore = create((set, get) => ({
     });
   },
 
-  // ── Expenses ─────────────────────────────────────────────────────────────
+  // ── Expenses ────────────────────────────────────────────────────────────
   addExpense: async (tripId, expense) => {
     const trip = get().trips.find(t => t.id === tripId);
     if (!trip) return;
@@ -314,7 +325,7 @@ const useTripStore = create((set, get) => ({
     await get().updateTrip(tripId, { checklist: [] });
   },
 
-  // ── Budget Estimation ─────────────────────────────────────────────────────
+  // ── Budget Estimation ──────────────────────────────────────────────────────
   saveBudgetEstimation: async (tripId, estimation) => {
     await get().updateTrip(tripId, { budgetEstimation: estimation });
   },
