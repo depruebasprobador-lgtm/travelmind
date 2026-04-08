@@ -4,7 +4,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   // Fix: Rolldown (Vite 8) can't resolve 'react-is' from recharts' es6 modules.
-  // Pre-bundling it ensures it's available as a proper CJS/ESM module.
+  // Reverting to stable Rollup bundler for production builds until Rolldown matures.
+  legacy: {
+    buildUsesRollup: true,
+  },
   optimizeDeps: {
     include: ['react-is'],
   },
