@@ -112,7 +112,7 @@ export default function ItineraryTab({ trip }) {
               Día {day.dayNumber} — {formatDate(day.date)}
             </h3>
             <button className="btn btn-ghost btn-sm"
-              onClick={() => { setAddingDay(day.id); resetForm(); }}>
+              onClick={() => { resetForm(); setAddingDay(day.id); }}>
               <Plus size={14} /> Añadir
             </button>
           </div>
