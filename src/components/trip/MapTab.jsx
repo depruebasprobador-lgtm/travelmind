@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { MapPin, Bed } from 'lucide-react';
+import { MapPin, Bed, Calendar } from 'lucide-react';
 
 // Fix for default markers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -87,6 +87,16 @@ export default function MapTab({ trip }) {
       });
     }
 
+    if (trip.itinerary) {
+      trip.itinerary.forEach(day => {
+        (day.activities || []).forEach(activity => {
+          if (activity.lat && activity.lng) {
+            allMarkers.push({ id: 'activity-' + activity.id, lat: activity.lat, lng: activity.lng, title: activity.name, subtitle: activity.place || null, dayNumber: day.dayNumber, time: activity.time || null, type: 'activity', tags: [], icon: customIcon('green') });
+          }
+        });
+      });
+    }
+
     setMarkers(allMarkers);
   }, [trip]);
 
@@ -99,6 +109,7 @@ export default function MapTab({ trip }) {
   );
   const hasUntaggedPlaces = markers.some(m => m.type === 'place' && m.tags.length === 0);
   const hasAccommodations = markers.some(m => m.type === 'accommodation');
+  const hasActivities = markers.some(m => m.type === 'activity');
   const visibleTagMeta = TAG_META.filter(t => usedTagIds.has(t.id));
 
   return (
@@ -115,6 +126,7 @@ export default function MapTab({ trip }) {
             <span>🛏️ Alojamiento</span>
           </div>
         )}
+        {hasActivities && (<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem' }}><img src={MARKER_IMG('green')} style={{ height: 18 }} alt="" /><span>📅 Actividad</span></div>)}
         {visibleTagMeta.map(tag => (
           <div key={tag.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem' }}>
             <img src={MARKER_IMG(tag.markerColor)} style={{ height: 18 }} alt="" />
@@ -140,9 +152,10 @@ export default function MapTab({ trip }) {
               <Marker key={marker.id} position={[marker.lat, marker.lng]} icon={marker.icon}>
                 <Popup>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                    {marker.type === 'accommodation' ? <Bed size={16} /> : <MapPin size={16} />}
+                    {marker.type === 'accommodation' ? <Bed size={16} /> : marker.type === 'activity' ? <Calendar size={16} /> : <MapPin size={16} />}
                     <div>
                       <h4 style={{ margin: 0, fontSize: '14px' }}>{marker.title}</h4>
+                      {marker.type === 'activity' && (<p style={{ margin: '4px 0 0', fontSize: '12px', color: '#666' }}>📅 Día {marker.dayNumber}{marker.time ? ' · ' + marker.time : ''}{marker.subtitle && <><br/><span>📍 {marker.subtitle}</span></>}</p>)}
                       {marker.type === 'place' && marker.tags.length > 0 && (
                         <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#666' }}>
                           {marker.tags.map(t => {
@@ -151,7 +164,7 @@ export default function MapTab({ trip }) {
                           }).join(' · ')}
                         </p>
                       )}
-                    </div>
+                    <a href={"https://www.google.com/maps?q="+marker.lat+","+marker.lng} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 4, fontSize: '11px', color: '#4F46E5' }}>Ver en Google Maps ↗</a></div>
                   </div>
                 </Popup>
               </Marker>
