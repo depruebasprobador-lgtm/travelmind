@@ -314,7 +314,7 @@ out 60;`;
 
       {/* POI Grid */}
       {!loading && !error && filtered.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(270px, 100%), 1fr))', gap: 14 }}>
           {filtered.map(poi => {
             const cat       = CATEGORIES.find(c => c.id === poi.category);
             const inPlaces  = addedPlaces.has(poi.id);
@@ -423,7 +423,7 @@ out 60;`;
             zIndex: 1000,
           }}
           onClick={e => e.target === e.currentTarget && setDayPickerPoi(null)}>
-          <div className="card" style={{ padding: 24, width: 360, maxWidth: '90vw' }}>
+          <div className="card" style={{ padding: 24, width: '100%', maxWidth: 360 }}>
             <h3 style={{ marginBottom: 8 }}>Añadir al itinerario</h3>
             <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
               <strong>{dayPickerPoi.name}</strong> — ¿En qué día?

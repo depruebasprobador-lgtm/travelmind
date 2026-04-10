@@ -134,7 +134,7 @@ export default function PlacesTab({ trip }) {
       )}
 
       {filteredPlaces.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '16px' }}>
           {filteredPlaces.map(p => {
             const placeTags = PLACE_TAGS.filter(t => (p.tags || []).includes(t.id));
             return (
