@@ -300,7 +300,7 @@ export default function DayPlanTab({ trip }) {
         <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           {dayAccom && (
             <div className="card" style={{
-              flex: 1, minWidth: 180, padding: '10px 14px',
+              flex: '1 1 160px', padding: '10px 14px',
               display: 'flex', alignItems: 'center', gap: 10
             }}>
               <Bed size={18} style={{ color: 'var(--primary)', flexShrink: 0 }} />
@@ -312,7 +312,7 @@ export default function DayPlanTab({ trip }) {
           )}
           {dayTransport.map(t => (
             <div key={t.id} className="card" style={{
-              flex: 1, minWidth: 180, padding: '10px 14px',
+              flex: '1 1 160px', padding: '10px 14px',
               display: 'flex', alignItems: 'center', gap: 10
             }}>
               <Bus size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
