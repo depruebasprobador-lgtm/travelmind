@@ -89,6 +89,7 @@ html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip; /* clip is stronger than hidden: catches fixed/absolute children too */
 }
 
 body {
@@ -98,6 +99,9 @@ body {
   line-height: 1.6;
   min-height: 100vh;
   transition: background var(--transition-base), color var(--transition-base);
+  overflow-x: clip;
+  max-width: 100%;
+  width: 100%;
 }
 
 a { color: var(--text-link); text-decoration: none; transition: color var(--transition-fast); }
@@ -125,6 +129,9 @@ ul, ol { list-style: none; }
 .app-layout {
   display: flex;
   min-height: 100vh;
+  max-width: 100%;
+  width: 100%;
+  overflow-x: clip;
 }
 
 .sidebar {
@@ -214,13 +221,17 @@ ul, ol { list-style: none; }
   flex: 1;
   margin-left: var(--sidebar-width);
   min-height: 100vh;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
   transition: margin-left var(--transition-base);
 }
 
 .page-container {
   padding: 32px;
-  max-width: 1400px;
+  max-width: min(1400px, 100%);
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .topbar {
@@ -447,7 +458,10 @@ ul, ol { list-style: none; }
   border-radius: var(--radius-lg);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE/Edge */
 }
+.tabs::-webkit-scrollbar { display: none; } /* Chrome/Safari/iPhone */
 
 .tab {
   padding: 8px 16px;
@@ -502,6 +516,51 @@ ul, ol { list-style: none; }
 .trip-card-body h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 4px; }
 .trip-card-meta { font-size: 0.8rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .trip-card-meta span { display: flex; align-items: center; gap: 6px; }
+
+/* --- Trip Card Quick Actions --- */
+.trip-card-quick-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity var(--transition-base), transform var(--transition-base);
+  pointer-events: none;
+}
+
+.trip-card:hover .trip-card-quick-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: all;
+}
+
+.trip-card-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.76rem;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+}
+
+.trip-card-action-btn:hover {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.trip-card-action-btn.danger:hover {
+  background: var(--error);
+  border-color: var(--error);
+  color: white;
+}
 
 /* --- Stats Cards --- */
 .stats-grid {
@@ -803,9 +862,26 @@ ul, ol { list-style: none; }
 
 @media (max-width: 640px) {
   .page-container { padding: 16px; }
+  .topbar { padding: 0 16px; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
+  .trips-grid { grid-template-columns: 1fr; }
+  .places-grid { grid-template-columns: 1fr; }
   .tabs { gap: 2px; }
   .tab { padding: 6px 12px; font-size: 0.8rem; }
+  .map-container { height: 280px; }
+  .hero { padding: 20px; }
+  .hero h1 { font-size: 1.5rem; }
+
+  /* Trip detail header */
+  .trip-header-bg { height: 190px; }
+  .trip-header-content { padding: 16px; }
+  .trip-header-content h1 { font-size: 1.2rem; }
+  .trip-header-content p { font-size: 0.78rem; }
+
+  /* Expense category legend: hide bar and pct, keep dot + name + amount */
+  .expense-cat-legend-item { grid-template-columns: 10px 1fr auto; }
+  .expense-cat-legend-bar-wrap,
+  .expense-cat-legend-pct { display: none; }
 }
 
 /* --- Scrollbar --- */
@@ -960,8 +1036,9 @@ ul, ol { list-style: none; }
 
 .checklist-cat-select {
   width: auto;
-  min-width: 150px;
-  flex-shrink: 0;
+  min-width: 120px;
+  max-width: 100%;
+  flex-shrink: 1;
   border-radius: var(--radius-md);
   font-size: 0.85rem;
   padding: 8px 10px;
@@ -1399,8 +1476,9 @@ ul, ol { list-style: none; }
 
 .expense-projection-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   font-size: 0.82rem;
   color: var(--text-secondary);
 }
@@ -1602,6 +1680,11 @@ ul, ol { list-style: none; }
   overflow: hidden;
 }
 
+.expense-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .expense-table {
   width: 100%;
   border-collapse: collapse;
@@ -1726,9 +1809,591 @@ ul, ol { list-style: none; }
   gap: 16px;
 }
 
+/* ============================
+   BUDGET CALCULATOR — Full Design
+   ============================ */
+
+.calc-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-modal);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 300;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.calc-panel {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 860px;
+  box-shadow: var(--shadow-xl);
+  animation: slideUp 250ms ease;
+  margin: auto;
+}
+
+.calc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+  gap: 12px;
+}
+
+.calc-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.calc-header-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--primary-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+}
+
+.calc-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.calc-subtitle {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.calc-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.calc-inputs-col {
+  padding: 24px;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.calc-results-col {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow: hidden;
+}
+
+.calc-section-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-tertiary);
+}
+
+/* Input group */
+.calc-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.calc-input-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.calc-input-icon {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+.calc-input-helper {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  cursor: help;
+  flex-shrink: 0;
+}
+
+.calc-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.calc-input-wrap .form-input {
+  padding-right: 40px;
+  width: 100%;
+}
+
+.calc-input-unit {
+  position: absolute;
+  right: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.calc-dates-hint {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+/* KPI grid */
+.calc-kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.calc-kpi {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  border: 1px solid var(--border-color);
+}
+
+.calc-kpi-total {
+  background: rgba(79,70,229,0.06);
+  border-color: rgba(79,70,229,0.2);
+}
+
+.calc-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+}
+
+.calc-kpi-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.calc-kpi-total .calc-kpi-value {
+  color: var(--primary);
+}
+
+/* Chart layout */
+.calc-chart-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.calc-chart-layout {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+
+/* Legend */
+.calc-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.calc-legend-item {
+  display: grid;
+  grid-template-columns: 10px 1fr 60px 36px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.calc-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.calc-legend-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calc-legend-bar-wrap {
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.calc-legend-bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.5s ease;
+}
+
+.calc-legend-pct {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-align: right;
+}
+
+.calc-legend-amount {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Empty state */
+.calc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  color: var(--text-tertiary);
+  text-align: center;
+  font-size: 0.85rem;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+/* Breakdown table */
+.calc-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.calc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.calc-table-row td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.calc-table-cat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+
+.calc-table-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.calc-table-amount {
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.calc-table-pct {
+  text-align: right;
+  color: var(--text-tertiary);
+  width: 40px;
+}
+
+.calc-table-total td {
+  padding: 10px 8px;
+  font-weight: 700;
+  border-top: 2px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.calc-table-total td:last-child { color: var(--primary); }
+
+/* Comparison */
+.calc-compare {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+}
+
+.calc-compare.over {
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.2);
+  color: var(--error);
+}
+
+.calc-compare.under {
+  background: rgba(16,185,129,0.08);
+  border: 1px solid rgba(16,185,129,0.2);
+  color: var(--success);
+}
+
+/* Saved badge */
+.calc-saved-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--success);
+  padding: 8px 12px;
+  background: rgba(16,185,129,0.08);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(16,185,129,0.2);
+}
+
+/* Footer */
+.calc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.calc-save-btn.saved {
+  background: var(--success);
+}
+
+/* Tooltip */
+.calc-tooltip {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Responsive ── */
+@media (max-width: 720px) {
+  .calc-body {
+    grid-template-columns: 1fr;
+  }
+  .calc-inputs-col {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 20px 16px;
+  }
+  .calc-results-col {
+    padding: 20px 16px;
+  }
+  .calc-chart-layout {
+    grid-template-columns: 1fr;
+  }
+  .calc-legend-item {
+    grid-template-columns: 10px 1fr auto;
+  }
+  .calc-legend-bar-wrap,
+  .calc-legend-pct { display: none; }
+  .calc-kpi-value { font-size: 1.3rem; }
+  .calc-footer { justify-content: flex-end; }
+}
+
 /* Install PWA button */
 .pwa-install-btn {
   background: var(--accent);
   color: #000;
   font-weight: 600;
+}
+
+/* =====================================================
+   MOBILE — iPhone 13 / 390px optimizations
+   ===================================================== */
+
+/* --- Safe area insets (notch + home bar) --- */
+@supports (padding: env(safe-area-inset-left)) {
+  .topbar {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  .page-container {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+  .sidebar {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* --- Prevent ALL children from escaping width --- */
+.page-container,
+.page-container > * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* --- section-header & data-actions: allow wrapping on small screens --- */
+.section-header {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.data-actions {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* --- trip-header actions: scrollable row instead of wrapping mess --- */
+.trip-header-actions {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  flex-wrap: nowrap;
+}
+.trip-header-actions::-webkit-scrollbar { display: none; }
+.trip-header-actions .btn {
+  flex-shrink: 0;
+}
+
+/* ── Small mobile (≤ 480px) ── */
+@media (max-width: 480px) {
+  /* Topbar */
+  .topbar { padding: 0 12px; }
+  .page-container { padding: 12px; }
+
+  /* Tabs: smaller text + less padding so more fit */
+  .tab { padding: 6px 10px; font-size: 0.78rem; }
+
+  /* Trip header */
+  .trip-header-bg { height: 170px; }
+  .trip-header-content { padding: 12px 14px; }
+  .trip-header-content h1 { font-size: 1.1rem; }
+  .trip-header-content p { font-size: 0.75rem; }
+  .trip-header-actions { gap: 6px; margin-top: 8px; }
+  .trip-header-actions .btn {
+    padding: 4px 9px;
+    font-size: 0.72rem;
+    gap: 4px;
+  }
+
+  /* Stats: 2 columns always */
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-card { padding: 14px; }
+
+  /* Trips & places: full width */
+  .trips-grid { grid-template-columns: 1fr; }
+  .places-grid { grid-template-columns: 1fr; }
+
+  /* Recommendations grid: full width */
+  /* Already uses minmax(min(270px,100%), 1fr) — should be fine */
+
+  /* Expense KPI: 2×2 */
+  .expense-kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* Expense category legend: hide bar + pct */
+  .expense-cat-legend-item { grid-template-columns: 10px 1fr auto; }
+  .expense-cat-legend-bar-wrap,
+  .expense-cat-legend-pct { display: none; }
+
+  /* Expense category layout: stack */
+  .expense-cat-layout { grid-template-columns: 1fr; }
+
+  /* Expense table: tighter cells */
+  .expense-td { padding: 9px 10px; font-size: 0.82rem; }
+  .expense-table th { padding: 8px 10px; font-size: 0.7rem; }
+
+  /* Section header */
+  .section-header { flex-direction: column; align-items: flex-start; }
+  .section-header h2 { font-size: 1rem; }
+
+  /* Modal: bottom sheet */
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal {
+    max-width: 100%;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    max-height: 90vh;
+  }
+
+  /* Hero */
+  .hero { padding: 18px 14px; }
+  .hero h1 { font-size: 1.3rem; }
+
+  /* Form rows: always 1 col */
+  .form-row { grid-template-columns: 1fr !important; }
+
+  /* Buttons: no transform hover effect on touch */
+  .btn-primary:hover { transform: none; }
+  .btn:active { transform: scale(0.97); }
+
+  /* FAB: closer to corner */
+  .fab { bottom: 20px; right: 16px; width: 50px; height: 50px; }
+
+  /* Card padding */
+  .card { padding: 14px; }
+
+  /* Timeline items: tighter */
+  .timeline-item { padding: 10px 0; }
+
+  /* Checklist items */
+  .checklist-item { padding: 10px 14px; }
+  .checklist-header-actions { flex-wrap: wrap; gap: 6px; }
+
+  /* Budget calculator */
+  .calc-body { grid-template-columns: 1fr; }
+  .calc-kpi-grid { grid-template-columns: 1fr 1fr; }
+  .calc-inputs-col { border-right: none; border-bottom: 1px solid var(--border-color); padding: 16px; }
+  .calc-results-col { padding: 16px; }
+}
+
+/* ── Touch improvements: larger tap targets ── */
+@media (hover: none) and (pointer: coarse) {
+  /* Minimum 44×44px tap target (Apple HIG) */
+  .btn { min-height: 40px; }
+  .btn-sm { min-height: 34px; }
+  .btn-icon { min-width: 40px; min-height: 40px; }
+  .sidebar-link { padding: 12px 14px; }
+  .tab { padding: 8px 12px; }
+  .checklist-check { width: 22px; height: 22px; }
+
+  /* Remove hover effects that don't apply on touch */
+  .card:hover { box-shadow: none; }
+  .trip-card:hover { transform: none; box-shadow: var(--shadow-md); }
+
+  /* Larger timeline drag handles */
+  .drag-handle { padding: 6px 8px; }
 }
