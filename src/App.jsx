@@ -5,6 +5,7 @@ import TripForm from './pages/TripForm';
 import TripDetail from './pages/TripDetail';
 import WorldMap from './pages/WorldMap';
 import Statistics from './pages/Statistics';
+import FutureDestinations from './pages/FutureDestinations';
 import { ToastProvider } from './components/Toast';
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="trip/:id/edit" element={<TripForm />} />
             <Route path="map" element={<WorldMap />} />
             <Route path="stats" element={<Statistics />} />
+            <Route path="ideas" element={<FutureDestinations />} />
             <Route path="*" element={<Dashboard />} />
           </Route>
         </Routes>
