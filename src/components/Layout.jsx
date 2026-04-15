@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Map, BarChart3, PlusCircle, Menu, X, Download } from 'lucide-react';
+import { LayoutDashboard, Map, BarChart3, PlusCircle, Menu, X, Download, Compass } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import SaveIndicator from './SaveIndicator';
 
@@ -26,6 +26,7 @@ export default function Layout() {
 
   const links = [
     { to: '/', icon: <LayoutDashboard size={20} />, label: 'Dashboard' },
+    { to: '/ideas', icon: <Compass size={20} />, label: 'Destinos Futuros' },
     { to: '/map', icon: <Map size={20} />, label: 'Mapa Mundial' },
     { to: '/stats', icon: <BarChart3 size={20} />, label: 'Estadísticas' },
     { to: '/trip/new', icon: <PlusCircle size={20} />, label: 'Nuevo Viaje' },
