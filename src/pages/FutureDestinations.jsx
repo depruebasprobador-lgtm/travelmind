@@ -4,7 +4,7 @@ import {
   Plus, Trash2, Edit3, MapPin, Star, Zap, ChevronDown,
   ArrowRight, CheckCircle2, Lightbulb, X, Map,
   ExternalLink, Plane, Calendar, DollarSign, ChevronRight,
-  TrendingUp, Clock, Save,
+  TrendingUp, Clock, Save, ListChecks, Circle, GripHorizontal,
 } from 'lucide-react';
 import useFutureStore from '../data/futureStore';
 import useTripStore from '../data/store';
@@ -86,11 +86,53 @@ function formatDate(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// Countdown: calcula estado relativo a hoy
+function countdownInfo(from, to) {
+  if (!from) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const start = new Date(from + 'T00:00:00');
+  const end   = to ? new Date(to + 'T00:00:00') : start;
+  const dayMs = 1000 * 60 * 60 * 24;
+  const daysToStart = Math.round((start - today) / dayMs);
+  const daysToEnd   = Math.round((end   - today) / dayMs);
+
+  if (daysToStart > 0)  return { type: 'future',   days: daysToStart, label: daysToStart === 1 ? 'Falta 1 día' : `Faltan ${daysToStart} días` };
+  if (daysToStart === 0) return { type: 'today',   days: 0,            label: '¡Hoy empieza!' };
+  if (daysToEnd >= 0)    return { type: 'ongoing', days: daysToEnd,    label: daysToEnd === 0 ? 'Último día' : `En curso · ${daysToEnd}d restantes` };
+  return                 { type: 'past',           days: -daysToEnd,   label: `Hace ${-daysToEnd} días` };
+}
+
+const COUNTDOWN_COLORS = {
+  future:  { bg: 'rgba(79,70,229,0.12)',  fg: '#4338CA' },
+  today:   { bg: 'rgba(245,158,11,0.18)', fg: '#B45309' },
+  ongoing: { bg: 'rgba(16,185,129,0.14)', fg: '#047857' },
+  past:    { bg: 'rgba(107,114,128,0.12)', fg: '#4B5563' },
+};
+
+// Progreso checklist
+function tasksProgress(tasks) {
+  const arr = tasks || [];
+  if (!arr.length) return null;
+  const done = arr.filter(t => t.done).length;
+  return { done, total: arr.length, pct: Math.round((done / arr.length) * 100) };
+}
+
 const EMPTY_DEST = {
   name: '', country: '', tripType: 'citytrip',
   priority: 'media', status: 'idea', notes: '', imageUrl: '',
 };
 const EMPTY_PLACE = { name: '', address: '', description: '', lat: null, lng: null, tags: [] };
+
+const TASK_TEMPLATES = [
+  '✈️ Comprar vuelos',
+  '🏨 Reservar alojamiento',
+  '🎫 Comprar entradas',
+  '🛂 Revisar pasaporte/visado',
+  '💉 Vacunas / seguro de viaje',
+  '🎒 Hacer la maleta',
+  '💳 Avisar al banco',
+  '📱 SIM / eSIM internacional',
+];
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ── Side Panel ────────────────────────────────────────────────────────────────
@@ -113,8 +155,11 @@ function DestinationPanel({ dest, onClose, onEdit, onConvert, store }) {
   const [editingPlace, setEditingPlace]   = useState(null);
   const [placeForm, setPlaceForm]         = useState(EMPTY_PLACE);
 
+  // Tasks
+  const [newTaskText, setNewTaskText] = useState('');
+
   // Active section
-  const [section, setSection] = useState('resumen'); // resumen | presupuesto | fechas | lugares
+  const [section, setSection] = useState('resumen'); // resumen | presupuesto | fechas | lugares | tareas
 
   // Keep in sync when dest changes externally
   useEffect(() => {
@@ -122,6 +167,7 @@ function DestinationPanel({ dest, onClose, onEdit, onConvert, store }) {
     setDates(dest.dates || { from: '', to: '' });
     setBudgetDirty(false);
     setDatesDirty(false);
+    setNewTaskText('');
   }, [dest.id]);
 
   // ── Budget save ──
@@ -166,16 +212,35 @@ function DestinationPanel({ dest, onClose, onEdit, onConvert, store }) {
     }));
   }
 
+  // ── Tasks ──
+  async function addTask(text) {
+    const clean = (text || '').trim();
+    if (!clean) return;
+    const tasks = [...(dest.tasks || []), { id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), text: clean, done: false }];
+    await updateDestination(dest.id, { tasks });
+  }
+  async function toggleTask(taskId) {
+    const tasks = (dest.tasks || []).map(t => t.id === taskId ? { ...t, done: !t.done } : t);
+    await updateDestination(dest.id, { tasks });
+  }
+  async function deleteTask(taskId) {
+    const tasks = (dest.tasks || []).filter(t => t.id !== taskId);
+    await updateDestination(dest.id, { tasks });
+  }
+
   const tt   = getTripType(dest.tripType);
   const pr   = getPriority(dest.priority);
   const st   = getStatus(dest.status);
   const days = daysBetween(dates.from, dates.to);
   const total = budgetTotal(budget);
+  const cd    = countdownInfo(dates.from, dates.to);
+  const tp    = tasksProgress(dest.tasks);
 
   const SECTIONS = [
     { id: 'resumen',     label: 'Resumen',     icon: '📋' },
     { id: 'fechas',      label: 'Fechas',      icon: '📅' },
     { id: 'presupuesto', label: 'Presupuesto', icon: '💰' },
+    { id: 'tareas',      label: 'Tareas',      icon: '✅' },
     { id: 'lugares',     label: 'Lugares',     icon: '📍' },
   ];
 
@@ -187,6 +252,11 @@ function DestinationPanel({ dest, onClose, onEdit, onConvert, store }) {
       {/* Panel */}
       <div className="fd-panel">
 
+        {/* Drag handle (visual, móvil) */}
+        <div className="fd-panel-handle" aria-hidden="true">
+          <GripHorizontal size={18} />
+        </div>
+
         {/* Header */}
         <div className="fd-panel-header" style={{ borderLeft: `4px solid ${pr.color}` }}>
           <div className="fd-panel-header-main">
@@ -194,8 +264,18 @@ function DestinationPanel({ dest, onClose, onEdit, onConvert, store }) {
               <h2 className="fd-panel-title">{dest.name}</h2>
               {dest.country && <p className="fd-panel-country">🌍 {dest.country}</p>}
             </div>
-            <button className="fd-panel-close" onClick={onClose}><X size={18} /></button>
+            <button className="fd-panel-close" onClick={onClose} aria-label="Cerrar"><X size={18} /></button>
           </div>
+
+          {/* Countdown destacado */}
+          {cd && (
+            <div className="fd-countdown" style={{ background: COUNTDOWN_COLORS[cd.type].bg, color: COUNTDOWN_COLORS[cd.type].fg }}>
+              <Clock size={14} />
+              <strong>{cd.label}</strong>
+              {cd.type === 'future' && days && <span style={{ opacity: 0.75, fontWeight: 500 }}>· {days}d de viaje</span>}
+            </div>
+          )}
+
           <div className="fd-panel-badges">
             <span className="fd-badge" style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
               {tt.icon} {tt.label}
@@ -221,6 +301,12 @@ function DestinationPanel({ dest, onClose, onEdit, onConvert, store }) {
               <span className="fd-panel-qs">
                 <DollarSign size={12} />
                 Presupuesto: <strong>{fmt(total)} €</strong>
+              </span>
+            )}
+            {tp && (
+              <span className="fd-panel-qs">
+                <ListChecks size={12} />
+                Tareas: <strong>{tp.done}/{tp.total}</strong> ({tp.pct}%)
               </span>
             )}
             {(dest.places || []).length > 0 && (
@@ -281,6 +367,19 @@ function DestinationPanel({ dest, onClose, onEdit, onConvert, store }) {
                   </div>
                   <ChevronRight size={14} style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }} />
                 </div>
+                <div className="fd-panel-summary-card" onClick={() => setSection('tareas')} style={{ cursor: 'pointer' }}>
+                  <ListChecks size={20} color="#EC4899" />
+                  <div style={{ flex: 1 }}>
+                    <p className="fd-panel-summary-label">Tareas</p>
+                    <p className="fd-panel-summary-val">{tp ? `${tp.done}/${tp.total} completadas` : 'Sin tareas'}</p>
+                    {tp && (
+                      <div className="fd-mini-progress" style={{ marginTop: 6 }}>
+                        <div className="fd-mini-progress-fill" style={{ width: tp.pct + '%' }} />
+                      </div>
+                    )}
+                  </div>
+                  <ChevronRight size={14} style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }} />
+                </div>
                 <div className="fd-panel-summary-card" onClick={() => setSection('lugares')} style={{ cursor: 'pointer' }}>
                   <MapPin size={20} color="#F59E0B" />
                   <div>
@@ -290,6 +389,99 @@ function DestinationPanel({ dest, onClose, onEdit, onConvert, store }) {
                   <ChevronRight size={14} style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }} />
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ── TAREAS ── */}
+          {section === 'tareas' && (
+            <div className="fd-panel-section">
+              <div className="fd-panel-section-title">
+                <ListChecks size={15} /> Checklist del viaje
+              </div>
+
+              {/* Progreso */}
+              {tp && (
+                <div className="fd-tasks-progress">
+                  <div className="fd-tasks-progress-bar">
+                    <div className="fd-tasks-progress-fill" style={{ width: tp.pct + '%' }} />
+                  </div>
+                  <span className="fd-tasks-progress-label">
+                    <strong>{tp.done}/{tp.total}</strong> · {tp.pct}%
+                  </span>
+                </div>
+              )}
+
+              {/* Input nueva tarea */}
+              <form
+                className="fd-task-form"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newTaskText.trim()) return;
+                  await addTask(newTaskText);
+                  setNewTaskText('');
+                  toast('Tarea añadida', 'success');
+                }}
+              >
+                <input
+                  className="fd-task-input"
+                  value={newTaskText}
+                  onChange={e => setNewTaskText(e.target.value)}
+                  placeholder="Añadir tarea (ej: comprar vuelos)"
+                />
+                <button type="submit" className="btn btn-primary btn-sm" disabled={!newTaskText.trim()}>
+                  <Plus size={14} />
+                </button>
+              </form>
+
+              {/* Plantillas rápidas */}
+              {(dest.tasks || []).length === 0 && (
+                <div className="fd-task-templates">
+                  <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: 8 }}>
+                    💡 Sugerencias para añadir rápido:
+                  </p>
+                  <div className="fd-task-templates-list">
+                    {TASK_TEMPLATES.map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        className="fd-task-template-chip"
+                        onClick={async () => { await addTask(t); toast('Tarea añadida', 'success'); }}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de tareas */}
+              {(dest.tasks || []).length > 0 ? (
+                <div className="fd-task-list">
+                  {(dest.tasks || []).map(t => (
+                    <div key={t.id} className={`fd-task-item ${t.done ? 'done' : ''}`}>
+                      <button
+                        type="button"
+                        className="fd-task-check"
+                        onClick={() => toggleTask(t.id)}
+                        aria-label={t.done ? 'Desmarcar' : 'Marcar'}
+                      >
+                        {t.done
+                          ? <CheckCircle2 size={20} style={{ color: '#10B981' }} />
+                          : <Circle size={20} style={{ color: 'var(--color-text-muted)' }} />}
+                      </button>
+                      <span className="fd-task-text">{t.text}</span>
+                      <button
+                        type="button"
+                        className="fd-task-delete"
+                        onClick={() => { deleteTask(t.id); toast('Tarea eliminada', 'info'); }}
+                        aria-label="Eliminar"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -947,6 +1139,8 @@ function DestinationCard({ dest, active, onOpen, onEdit, onDelete, onConvert }) 
   const st    = getStatus(dest.status);
   const total = budgetTotal(dest.budget);
   const days  = daysBetween(dest.dates?.from, dest.dates?.to);
+  const cd    = countdownInfo(dest.dates?.from, dest.dates?.to);
+  const tp    = tasksProgress(dest.tasks);
 
   return (
     <div className={`fd-card ${active ? 'fd-card--active' : ''}`} onClick={onOpen}>
@@ -963,6 +1157,13 @@ function DestinationCard({ dest, active, onOpen, onEdit, onDelete, onConvert }) 
           <button className="fd-card-action-btn" onClick={onEdit} title="Editar"><Edit3 size={13} /></button>
           <button className="fd-card-action-btn fd-card-action-danger" onClick={onDelete} title="Eliminar"><Trash2 size={13} /></button>
         </div>
+
+        {/* Countdown badge esquina */}
+        {cd && (
+          <div className="fd-card-countdown" style={{ background: COUNTDOWN_COLORS[cd.type].bg, color: COUNTDOWN_COLORS[cd.type].fg }}>
+            <Clock size={11} /> {cd.label}
+          </div>
+        )}
       </div>
       <div className="fd-card-body">
         <h3 className="fd-card-title">{dest.name}</h3>
@@ -977,8 +1178,8 @@ function DestinationCard({ dest, active, onOpen, onEdit, onDelete, onConvert }) 
           )}
         </div>
 
-        {/* Dates + budget chips */}
-        {(days || total > 0) && (
+        {/* Dates + budget + tasks chips */}
+        {(days || total > 0 || tp) && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
             {days && (
               <span className="fd-card-chip">
@@ -991,6 +1192,18 @@ function DestinationCard({ dest, active, onOpen, onEdit, onDelete, onConvert }) 
                 <DollarSign size={11} /> {fmt(total)} €
               </span>
             )}
+            {tp && (
+              <span className="fd-card-chip fd-card-chip--pink">
+                <ListChecks size={11} /> {tp.done}/{tp.total}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Mini progress bar de tareas */}
+        {tp && (
+          <div className="fd-mini-progress" style={{ marginTop: 8 }}>
+            <div className="fd-mini-progress-fill" style={{ width: tp.pct + '%' }} />
           </div>
         )}
 

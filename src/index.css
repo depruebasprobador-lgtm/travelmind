@@ -53,6 +53,13 @@
   --sidebar-width: 260px;
   --sidebar-collapsed: 72px;
   --topbar-height: 64px;
+
+  /* Aliases semánticos usados por componentes nuevos (.rt-*, .fd-panel-*) */
+  --color-text: var(--text-primary);
+  --color-text-muted: var(--text-secondary);
+  --color-surface: var(--bg-primary);
+  --color-bg: var(--bg-secondary);
+  --color-border: var(--border-color);
 }
 
 /* --- Dark Mode --- */
@@ -79,6 +86,13 @@
   --shadow-lg: 0 10px 15px rgba(0,0,0,0.5);
   --shadow-xl: 0 20px 25px rgba(0,0,0,0.5);
   --shadow-glow: 0 0 30px rgba(79,70,229,0.25);
+
+  /* Aliases semánticos en dark */
+  --color-text: var(--text-primary);
+  --color-text-muted: var(--text-secondary);
+  --color-surface: var(--bg-primary);
+  --color-bg: var(--bg-secondary);
+  --color-border: var(--border-color);
 }
 
 /* --- Reset & Base --- */
@@ -3858,22 +3872,4 @@ ul, ol { list-style: none; }
   color: #059669;
   border-color: rgba(16,185,129,0.25);
 }
-
-/* Mobile panel */
-@media (max-width: 899px) {
-  .fd-panel {
-    width: 100vw;
-    top: auto;
-    height: 85vh;
-    border-radius: 20px 20px 0 0;
-    border-left: none;
-    border-top: 1px solid var(--color-border, var(--border-color));
-    box-shadow: 0 -8px 40px rgba(0,0,0,0.2);
-    animation: fd-panel-slide-up 0.22s cubic-bezier(0.4,0,0.2,1);
-  }
-  @keyframes fd-panel-slide-up {
-    from { transform: translateY(100%); }
-    to   { transform: translateY(0);    }
-  }
-  .fd-dates-grid { grid-template-columns: 1fr; }
-}
+.fd-card-chip--pink 
