@@ -3873,3 +3873,206 @@ ul, ol { list-style: none; }
   border-color: rgba(16,185,129,0.25);
 }
 .fd-card-chip--pink 
+/* ══════════════════════════════════════════════════════════════
+   FUTURE DESTINATIONS — addon: countdown, tareas, mini progress
+   ══════════════════════════════════════════════════════════════ */
+
+/* Countdown card (esquina inferior izquierda del header de la card) */
+.fd-card-countdown {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 99px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+/* Mini progress bar (en cards y resumen) */
+.fd-mini-progress {
+  width: 100%;
+  height: 5px;
+  background: var(--color-border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.fd-mini-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #EC4899, #8B5CF6);
+  transition: width 0.3s ease;
+}
+
+/* Drag handle del panel (solo visible en móvil) */
+.fd-panel-handle {
+  display: none;
+}
+
+/* Countdown header (en panel) */
+.fd-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 99px;
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+  width: fit-content;
+}
+.fd-countdown strong { font-weight: 700; }
+
+/* Tareas */
+.fd-tasks-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.fd-tasks-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--color-border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.fd-tasks-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #EC4899, #8B5CF6);
+  transition: width 0.3s ease;
+}
+.fd-tasks-progress-label {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.fd-tasks-progress-label strong { color: #8B5CF6; }
+
+.fd-task-form {
+  display: flex;
+  gap: 8px;
+}
+.fd-task-input {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.fd-task-input:focus { border-color: #4F46E5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+
+.fd-task-templates {
+  background: var(--color-bg);
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  padding: 12px;
+}
+.fd-task-templates-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fd-task-template-chip {
+  padding: 6px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.fd-task-template-chip:hover {
+  border-color: #8B5CF6;
+  color: #8B5CF6;
+  background: rgba(139,92,246,0.06);
+}
+
+.fd-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fd-task-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  transition: all 0.15s;
+}
+.fd-task-item:hover { border-color: #C7D2FE; }
+.fd-task-item.done {
+  background: var(--color-surface);
+  opacity: 0.65;
+}
+.fd-task-item.done .fd-task-text {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+.fd-task-check {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.fd-task-text {
+  flex: 1;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  word-break: break-word;
+}
+.fd-task-delete {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.5;
+  transition: all 0.15s;
+}
+.fd-task-delete:hover { opacity: 1; color: var(--error); background: rgba(239,68,68,0.1); }
+
+/* ── Móvil mejoras (panel y formularios) ── */
+@media (max-width: 899px) {
+  .fd-panel {
+    height: 92vh !important;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .fd-panel-handle {
+    display: flex;
+    justify-content: center;
+    padding: 8px 0 4px;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    opacity: 0.5;
+  }
+  .fd-panel-tab {
+    padding: 12px 10px;
+    font-size: 0.8rem;
+    min-height: 44px;
+  }
+  /* Evitar zoom de iOS en inputs */
+  .fd-task-input { font-size: 16px; }
+  .fd-budget-row input { font-size: 16px; }
+  .fd-field input[type="date"] { font-size: 16px; }
+}
