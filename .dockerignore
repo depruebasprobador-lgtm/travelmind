@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.env
+.env.local
+.env.*.local
+.vscode
+.idea
+*.log
+*.bat
+*.ps1
+README.md
