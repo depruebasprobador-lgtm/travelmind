@@ -47,6 +47,11 @@ export default defineConfig({
         ]
       },
       workbox: {
+        // Asegurar que el SW nuevo toma efecto INMEDIATAMENTE en cada deploy
+        // (evita que el navegador muestre la versión vieja tras un redeploy)
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
