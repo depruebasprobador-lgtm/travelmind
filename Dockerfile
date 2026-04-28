@@ -4,8 +4,13 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Instalar dependencias (capa cacheable mientras package*.json no cambie)
+# --legacy-peer-deps: vite-plugin-pwa@1.2.0 declara peer vite ^3..^7,
+# pero el proyecto usa vite 8.x. En local no se nota porque node_modules
+# ya está instalado; en un build limpio npm ci falla con ERESOLVE.
+# Usamos `npm install` (no `ci`) para tolerar lock-file ligeramente
+# desincronizado.
 COPY package.json package-lock.json* ./
-RUN npm ci --no-audit --no-fund
+RUN npm install --no-audit --no-fund --legacy-peer-deps
 
 # Copiar el resto del código
 COPY . .
