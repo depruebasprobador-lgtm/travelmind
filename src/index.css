@@ -4076,3 +4076,380 @@ ul, ol { list-style: none; }
   .fd-budget-row input { font-size: 16px; }
   .fd-field input[type="date"] { font-size: 16px; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   ITINERARIO — indicador de conexión y editor de trasbordo
+   ══════════════════════════════════════════════════════════════ */
+
+.itin-connection {
+  margin: 6px 0 10px 24px;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid transparent;
+}
+.itin-connection--overlap,
+.itin-connection--critical { border-color: rgba(239,68,68,0.25); }
+.itin-connection--tight,
+.itin-connection--short    { border-color: rgba(245,158,11,0.25); }
+.itin-connection--ok       { border-color: rgba(16,185,129,0.18); }
+
+/* Línea decorativa que conecta visualmente con las actividades */
+.itin-connection::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: currentColor;
+  opacity: 0.25;
+}
+
+.itin-connection-summary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.itin-connection-summary:hover { filter: brightness(0.97); }
+
+.itin-connection-icon { font-size: 1rem; flex-shrink: 0; }
+
+.itin-connection-text {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.itin-connection-text strong { font-weight: 700; }
+
+.itin-connection-risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: rgba(255,255,255,0.5);
+}
+
+.itin-connection-toggle {
+  flex-shrink: 0;
+  color: inherit;
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+}
+
+/* Editor de trasbordo */
+.itin-transfer-editor {
+  padding: 12px 14px 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+  background: var(--color-surface, var(--bg-card));
+  border-top: 1px solid var(--color-border, var(--border-color));
+}
+
+.itin-transfer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.itin-transfer-row--full { grid-column: 1 / -1; }
+
+.itin-transfer-row label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted, var(--text-secondary));
+}
+
+.form-input-sm {
+  padding: 7px 10px;
+  font-size: 0.85rem;
+  border-radius: 8px;
+}
+
+.itin-transfer-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 600px) {
+  .itin-transfer-editor { grid-template-columns: 1fr; }
+  .itin-connection { margin-left: 14px; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   GASTOS COMPARTIDOS — participantes, balances, transferencias
+   ══════════════════════════════════════════════════════════════ */
+
+.sh-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.sh-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+/* ── Participantes ── */
+.sh-participants-card { padding: 16px; }
+
+.sh-participant-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.sh-participant-form .form-input { flex: 1; }
+
+.sh-participant-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sh-participant-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 5px;
+  background: var(--color-bg);
+  border: 1.5px solid var(--color-border);
+  border-radius: 99px;
+  font-size: 0.85rem;
+  transition: border-color 0.15s;
+}
+.sh-participant-chip:hover { background: var(--color-surface); }
+
+.sh-participant-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}
+.sh-mini-avatar { width: 20px; height: 20px; font-size: 0.68rem; }
+.sh-balance-avatar { width: 30px; height: 30px; font-size: 0.85rem; }
+
+.sh-participant-name { font-weight: 500; }
+
+.sh-participants-empty {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+  text-align: center;
+  padding: 12px;
+}
+
+/* ── Form: split chips ── */
+.sh-split-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sh-split-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 6px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 99px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  background: var(--color-bg);
+  transition: all 0.15s;
+}
+.sh-split-chip input { display: none; }
+.sh-split-chip.checked {
+  background: var(--color-surface);
+  font-weight: 600;
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.08);
+}
+.sh-split-chip:not(.checked) { opacity: 0.6; }
+.sh-split-chip:hover { opacity: 1; }
+
+/* ── Tabla: pagador chip / split tag ── */
+.sh-payer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+.sh-split-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: rgba(99,102,241,0.12);
+  color: #4F46E5;
+  font-size: 0.68rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+/* ── Settlement card ── */
+.sh-settle-card { padding: 16px; }
+
+.sh-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.sh-warning {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.25);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: #92400E;
+}
+
+.sh-currency-block {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--color-border);
+}
+.sh-currency-block:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+
+.sh-currency-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sh-currency-tag {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(99,102,241,0.12);
+  color: #4338CA;
+}
+.sh-currency-total {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+.sh-currency-total strong { color: var(--color-text); font-weight: 700; }
+
+.sh-balances {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.sh-balance-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  font-size: 0.85rem;
+}
+.sh-balance-row.positive { background: rgba(16,185,129,0.06); border-color: rgba(16,185,129,0.2); }
+.sh-balance-row.negative { background: rgba(239,68,68,0.06);  border-color: rgba(239,68,68,0.2); }
+.sh-balance-name { flex: 1; font-weight: 600; }
+.sh-balance-amount { font-size: 0.82rem; }
+.sh-balance-row.positive .sh-balance-amount { color: var(--success); }
+.sh-balance-row.negative .sh-balance-amount { color: var(--error); }
+.sh-balance-row.positive strong,
+.sh-balance-row.negative strong { font-weight: 700; }
+
+.sh-transfers-help {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.sh-transfers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sh-transfer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  font-size: 0.88rem;
+}
+.sh-transfer-name { font-weight: 500; }
+.sh-transfer-arrow { color: var(--color-text-muted); flex-shrink: 0; }
+.sh-transfer-amount {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--primary);
+  background: rgba(99,102,241,0.08);
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 0.85rem;
+}
+
+.sh-transfers-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px;
+  background: rgba(16,185,129,0.08);
+  border: 1px solid rgba(16,185,129,0.25);
+  border-radius: 10px;
+  color: #047857;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.sh-settle-empty {
+  margin: 0;
+  padding: 12px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+@media (max-width: 600px) {
+  .sh-balances { grid-template-columns: 1fr; }
+  .sh-transfer-row { font-size: 0.82rem; padding: 9px 10px; gap: 6px; }
+  .sh-transfer-amount { font-size: 0.8rem; padding: 3px 8px; }
+}

@@ -50,6 +50,7 @@ const useTripStore = create((set, get) => ({
       transports: tripData.transports || [],
       places: tripData.places || [],
       expenses: tripData.expenses || [],
+      participants: tripData.participants || [],
       checklist: tripData.checklist || [],
       budgetEstimation: tripData.budgetEstimation || null,
     };
@@ -244,6 +245,54 @@ const useTripStore = create((set, get) => ({
     await get().updateTrip(tripId, {
       places: trip.places.filter(p => p.id !== placeId),
     });
+  },
+
+  // ── Participants (gastos compartidos) ────────────────────────────────────
+  // Single-user app: los participantes son nombres que el dueño del viaje
+  // define manualmente. Persistidos como trip.participants en el JSONB.
+  addParticipant: async (tripId, name, color) => {
+    const trip = get().trips.find(t => t.id === tripId);
+    if (!trip) return;
+    const participants = trip.participants || [];
+    const newP = {
+      id: generateId(),
+      name: (name || '').trim() || 'Sin nombre',
+      color: color || '#6366F1',
+      createdAt: new Date().toISOString(),
+    };
+    await get().updateTrip(tripId, { participants: [...participants, newP] });
+    return newP;
+  },
+
+  updateParticipant: async (tripId, participantId, updates) => {
+    const trip = get().trips.find(t => t.id === tripId);
+    if (!trip) return;
+    await get().updateTrip(tripId, {
+      participants: (trip.participants || []).map(p =>
+        p.id === participantId ? { ...p, ...updates } : p,
+      ),
+    });
+  },
+
+  deleteParticipant: async (tripId, participantId) => {
+    const trip = get().trips.find(t => t.id === tripId);
+    if (!trip) return;
+    // Quitarlo de participants y limpiar referencias en expenses
+    const participants = (trip.participants || []).filter(p => p.id !== participantId);
+    const expenses = (trip.expenses || []).map(e => {
+      if (e.paidBy !== participantId && !(e.splitBetween || []).includes(participantId)) return e;
+      const next = { ...e };
+      if (next.paidBy === participantId) next.paidBy = null;
+      if (Array.isArray(next.splitBetween)) {
+        next.splitBetween = next.splitBetween.filter(id => id !== participantId);
+      }
+      if (next.splits && participantId in next.splits) {
+        const { [participantId]: _omit, ...rest } = next.splits;
+        next.splits = rest;
+      }
+      return next;
+    });
+    await get().updateTrip(tripId, { participants, expenses });
   },
 
   // ── Expenses ─────────────────────────────────────────────────────────────
