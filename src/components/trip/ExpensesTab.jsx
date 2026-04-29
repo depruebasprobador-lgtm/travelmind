@@ -344,7 +344,7 @@ function ParticipantsSection({ trip }) {
       <form className="sh-participant-form" onSubmit={handleAdd}>
         <input
           className="form-input"
-          placeholder="Nombre (ej: Diego, María, Juan...)"
+          placeholder="Nombre (ej: Diego, Celia, Esnupi...)"
           value={newName}
           onChange={e => setNewName(e.target.value)}
         />
