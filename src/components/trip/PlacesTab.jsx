@@ -1,9 +1,20 @@
 import { useState } from 'react';
-import { Plus, Trash2, Edit3, ExternalLink, MapPin } from 'lucide-react';
+import { Plus, Trash2, Edit3, ExternalLink, MapPin, CalendarPlus } from 'lucide-react';
 import useTripStore from '../../data/store';
 import Modal from '../Modal';
 import PlaceSearch from '../PlaceSearch';
 import EmptyState from '../EmptyState';
+import { formatDateShort } from '../../utils/helpers';
+
+// Mapeo etiqueta de Place → tipo de actividad de itinerario
+const PLACE_TAG_TO_ACTIVITY_TYPE = {
+  restaurante: 'lunch',
+  cafe: 'cafe',
+  mirador: 'visit',
+  monumento: 'visit',
+  actividad: 'activity',
+  foto: 'activity',
+};
 
 const PLACE_TAGS = [
   { id: 'restaurante', label: 'Restaurante', icon: '🍽️', color: '#f97316', bg: 'rgba(249,115,22,0.12)' },
@@ -23,7 +34,30 @@ export default function PlacesTab({ trip }) {
   });
   const [activeFilter, setActiveFilter] = useState(null);
 
-  const { addPlace, updatePlace, deletePlace } = useTripStore();
+  const { addPlace, updatePlace, deletePlace, addActivity } = useTripStore();
+  const [addToDayMenu, setAddToDayMenu] = useState(null); // placeId
+
+  const itinerary = trip.itinerary || [];
+
+  const handleAddToDay = (place, dayId) => {
+    const tag = (place.tags || [])[0];
+    const type = PLACE_TAG_TO_ACTIVITY_TYPE[tag] || 'visit';
+    addActivity(trip.id, dayId, {
+      name: place.name,
+      place: place.address || place.name,
+      lat: place.lat || null,
+      lng: place.lng || null,
+      type,
+      time: '',
+      endTime: '',
+      notes: place.description || '',
+      cost: null,
+      reservationUrl: place.link || '',
+      reservationCode: '',
+      fromPlaceId: place.id,
+    });
+    setAddToDayMenu(null);
+  };
 
   const resetForm = () => {
     setForm({ name: '', address: '', description: '', link: '', lat: null, lng: null, tags: [] });
@@ -171,7 +205,16 @@ export default function PlacesTab({ trip }) {
                       <p style={{ fontSize: '0.85rem', marginTop: 8 }}>{p.description}</p>
                     )}
                   </div>
-                  <div style={{ display: 'flex', gap: 4, marginLeft: 12 }}>
+                  <div style={{ display: 'flex', gap: 4, marginLeft: 12, position: 'relative' }}>
+                    {itinerary.length > 0 && (
+                      <button
+                        className="btn btn-icon btn-sm"
+                        title="Añadir al itinerario"
+                        onClick={() => setAddToDayMenu(addToDayMenu === p.id ? null : p.id)}
+                        style={{ color: 'var(--primary)' }}>
+                        <CalendarPlus size={14} />
+                      </button>
+                    )}
                     {p.link && (
                       <a href={p.link} target="_blank" rel="noopener" className="btn btn-icon btn-sm" title="Ver enlace">
                         <ExternalLink size={14} />
@@ -186,6 +229,38 @@ export default function PlacesTab({ trip }) {
                       onClick={() => deletePlace(trip.id, p.id)}>
                       <Trash2 size={14} />
                     </button>
+
+                    {addToDayMenu === p.id && (
+                      <div
+                        onMouseLeave={() => setAddToDayMenu(null)}
+                        style={{
+                          position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                          background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                          borderRadius: 8, boxShadow: 'var(--shadow-lg)', zIndex: 20,
+                          minWidth: 200, maxHeight: 260, overflowY: 'auto', padding: 4,
+                        }}>
+                        <div style={{ padding: '6px 10px', fontSize: '0.72rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>
+                          AÑADIR AL DÍA
+                        </div>
+                        {itinerary.map(d => (
+                          <button
+                            key={d.id}
+                            onClick={() => handleAddToDay(p, d.id)}
+                            style={{
+                              display: 'block', width: '100%', textAlign: 'left',
+                              padding: '8px 10px', background: 'transparent', border: 'none',
+                              cursor: 'pointer', borderRadius: 6, fontSize: '0.85rem',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <strong>Día {d.dayNumber}</strong> · {formatDateShort(d.date)}
+                            <span style={{ color: 'var(--text-tertiary)', marginLeft: 6, fontSize: '0.78rem' }}>
+                              ({d.activities?.length || 0} act.)
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

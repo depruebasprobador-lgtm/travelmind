@@ -17,6 +17,16 @@ dist-ssr
 .env.local
 .env.*.local
 
+# Scripts de deploy locales (contienen el PAT embebido — NUNCA commitear)
+PUSH_GITHUB.ps1
+PUSH_GITHUB.bat
+COMMIT_Y_PUSH.bat
+push.ps1
+push-recurring.ps1
+.git-token
+.git-token.txt
+.git-token.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -157,6 +157,44 @@ const useTripStore = create((set, get) => ({
     await get().updateTrip(tripId, { itinerary });
   },
 
+  duplicateActivity: async (tripId, dayId, activityId) => {
+    const trip = get().trips.find(t => t.id === tripId);
+    if (!trip) return;
+    const day = trip.itinerary.find(d => d.id === dayId);
+    if (!day) return;
+    const original = day.activities.find(a => a.id === activityId);
+    if (!original) return;
+    const clone = {
+      ...original,
+      id: generateId(),
+      completed: false,
+      order: day.activities.length,
+    };
+    const itinerary = trip.itinerary.map(d =>
+      d.id === dayId ? { ...d, activities: [...d.activities, clone] } : d
+    );
+    await get().updateTrip(tripId, { itinerary });
+  },
+
+  duplicateDay: async (tripId, dayId, targetDate) => {
+    const trip = get().trips.find(t => t.id === tripId);
+    if (!trip) return;
+    const source = trip.itinerary.find(d => d.id === dayId);
+    if (!source) return;
+    const targetDay = trip.itinerary.find(d => d.date === targetDate);
+    if (!targetDay) return;
+    const cloned = (source.activities || []).map((a, i) => ({
+      ...a,
+      id: generateId(),
+      completed: false,
+      order: (targetDay.activities?.length || 0) + i,
+    }));
+    const itinerary = trip.itinerary.map(d =>
+      d.id === targetDay.id ? { ...d, activities: [...(d.activities || []), ...cloned] } : d
+    );
+    await get().updateTrip(tripId, { itinerary });
+  },
+
   reorderActivities: async (tripId, dayId, reorderedActivities) => {
     const trip = get().trips.find(t => t.id === tripId);
     if (!trip) return;

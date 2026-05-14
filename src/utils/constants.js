@@ -29,6 +29,30 @@ export const EXPENSE_CATEGORIES = {
   leisure: { label: 'Ocio', color: '#10B981', icon: 'Sparkles' },
 };
 
+// Tipos de actividad para el itinerario.
+// `mealSlot` indica si cuenta como comida del día (para el recordatorio).
+// `expenseCategory` mapea al tipo de gasto al "Convertir en gasto".
+// `defaultDuration` en minutos.
+export const ACTIVITY_TYPES = {
+  breakfast: { label: 'Desayuno',  icon: 'Coffee',           color: '#FBBF24', bg: 'rgba(251,191,36,0.14)', defaultDuration: 45,  mealSlot: 'breakfast', expenseCategory: 'comida' },
+  lunch:     { label: 'Comida',    icon: 'Utensils',         color: '#F97316', bg: 'rgba(249,115,22,0.14)', defaultDuration: 75,  mealSlot: 'lunch',     expenseCategory: 'comida' },
+  dinner:    { label: 'Cena',      icon: 'Wine',             color: '#A855F7', bg: 'rgba(168,85,247,0.14)', defaultDuration: 90,  mealSlot: 'dinner',    expenseCategory: 'comida' },
+  cafe:      { label: 'Café/Snack',icon: 'Coffee',           color: '#B45309', bg: 'rgba(180,83,9,0.14)',   defaultDuration: 30,  mealSlot: null,        expenseCategory: 'comida' },
+  visit:     { label: 'Visita',    icon: 'Landmark',         color: '#3B82F6', bg: 'rgba(59,130,246,0.14)', defaultDuration: 90,  mealSlot: null,        expenseCategory: 'actividades' },
+  activity:  { label: 'Ocio',      icon: 'Sparkles',         color: '#10B981', bg: 'rgba(16,185,129,0.14)', defaultDuration: 120, mealSlot: null,        expenseCategory: 'actividades' },
+  transport: { label: 'Traslado',  icon: 'Bus',              color: '#6366F1', bg: 'rgba(99,102,241,0.14)', defaultDuration: 60,  mealSlot: null,        expenseCategory: 'transporte' },
+  shopping:  { label: 'Compras',   icon: 'ShoppingBag',      color: '#EC4899', bg: 'rgba(236,72,153,0.14)', defaultDuration: 60,  mealSlot: null,        expenseCategory: 'compras' },
+  rest:      { label: 'Descanso',  icon: 'Bed',              color: '#9CA3AF', bg: 'rgba(156,163,175,0.14)',defaultDuration: 60,  mealSlot: null,        expenseCategory: 'otros' },
+  other:     { label: 'Otro',      icon: 'Star',             color: '#6B7280', bg: 'rgba(107,114,128,0.14)',defaultDuration: 60,  mealSlot: null,        expenseCategory: 'otros' },
+};
+
+// Slots de comida que pinta el recordatorio del día.
+export const MEAL_SLOTS = [
+  { id: 'breakfast', label: 'Desayuno', icon: '☕' },
+  { id: 'lunch',     label: 'Comida',   icon: '🍽️' },
+  { id: 'dinner',    label: 'Cena',     icon: '🍷' },
+];
+
 export const DEFAULT_CHECKLIST = [
   'Pasaporte / DNI',
   'Tarjetas de embarque',
