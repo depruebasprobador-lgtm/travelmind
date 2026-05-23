@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import useTripStore from '../../data/store';
 import EmptyState from '../EmptyState';
+import ConfirmDialog from '../ConfirmDialog';
 
 // ── Category config ──────────────────────────────────────────────────────────
 const CATEGORIES = [
@@ -202,6 +203,9 @@ export default function ChecklistTab({ trip }) {
     deleteCompletedChecklistItems,
     clearChecklist,
   } = useTripStore();
+  const saveStatus = useTripStore(s => s.saveStatus);
+  const isSaving = saveStatus === 'saving';
+  const [confirmClearDone, setConfirmClearDone] = useState(false);
 
   const checklist = trip.checklist || [];
 
@@ -225,19 +229,32 @@ export default function ChecklistTab({ trip }) {
     })).filter(g => g.items.length > 0);
   }, [filtered]);
 
-  const handleAdd = (e) => {
+  const handleAdd = async (e) => {
     e.preventDefault();
+    if (isSaving) return;
     if (!newItemText.trim()) return;
-    addChecklistItem(trip.id, newItemText.trim(), newItemCategory);
+    const r = await addChecklistItem(trip.id, newItemText.trim(), newItemCategory);
+    if (!r?.ok) return;
     setNewItemText('');
   };
 
-  const handleTemplate = () => {
+  const handleTemplate = async () => {
     // Only add items not already present (by text)
     const existingTexts = new Set(checklist.map(i => i.text.toLowerCase()));
     const toAdd = TEMPLATE_ITEMS.filter(t => !existingTexts.has(t.text.toLowerCase()));
-    if (toAdd.length > 0) addChecklistItems(trip.id, toAdd);
+    if (toAdd.length === 0) {
+      setShowTemplateConfirm(false);
+      return;
+    }
+    const r = await addChecklistItems(trip.id, toAdd);
+    if (!r?.ok) return;
     setShowTemplateConfirm(false);
+  };
+
+  const handleClearDoneConfirm = async () => {
+    const r = await deleteCompletedChecklistItems(trip.id);
+    setConfirmClearDone(false);
+    return r;
   };
 
   // Filter pill data
@@ -254,6 +271,16 @@ export default function ChecklistTab({ trip }) {
 
   return (
     <div className="checklist-container">
+
+      {confirmClearDone && (
+        <ConfirmDialog
+          title="Eliminar elementos completados"
+          message={`¿Eliminar los ${completedCount} elemento(s) completado(s)? Esta acción no se puede deshacer.`}
+          danger
+          onCancel={() => setConfirmClearDone(false)}
+          onConfirm={handleClearDoneConfirm}
+        />
+      )}
 
       {/* ── Header ── */}
       <div className="checklist-header">
@@ -357,7 +384,8 @@ export default function ChecklistTab({ trip }) {
           {completedCount > 0 && (
             <button
               className="checklist-filter-pill danger"
-              onClick={() => deleteCompletedChecklistItems(trip.id)}
+              onClick={() => setConfirmClearDone(true)}
+              disabled={isSaving}
               title="Eliminar todos los completados"
             >
               <RotateCcw size={12} /> Limpiar completados

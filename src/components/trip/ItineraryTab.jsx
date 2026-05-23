@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -6,11 +6,12 @@ import {
   Plus, GripVertical, Clock, MapPin, Trash2, Edit3, X, Check, ExternalLink,
   Search, AlertTriangle, ChevronDown, ChevronUp, Copy, Wallet, Link as LinkIcon,
   Coffee, Utensils, Wine, Landmark, Sparkles, Bus, ShoppingBag, Bed, Star, Zap,
+  ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import useTripStore from '../../data/store';
 import {
-  generateDays, formatDate, syncDaysWithDates, parseQuickActivity, addMinutesToTime,
-  formatCurrency,
+  generateDays, formatDate, parseQuickActivity, addMinutesToTime,
+  formatCurrency, normalizeItinerary, compareISODates,
 } from '../../utils/helpers';
 import { ACTIVITY_TYPES, MEAL_SLOTS } from '../../utils/constants';
 import EmptyState from '../EmptyState';
@@ -32,11 +33,14 @@ function ActivityPlaceSearch({ onSelect, placeholder }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [show, setShow] = useState(false);
-  const timerRef = useState(null);
+  // useRef (no useState) para que el timer persista entre renders y se pueda
+  // cancelar correctamente. Antes era useState(null), que devolvía un array
+  // nuevo en cada render y nunca cancelaba el timer anterior.
+  const timerRef = useRef(null);
 
   useEffect(() => {
     if (query.length < 3) { setResults([]); setShow(false); return; }
-    clearTimeout(timerRef[0]);
+    if (timerRef.current) clearTimeout(timerRef.current);
     const t = setTimeout(async () => {
       setLoading(true);
       try {
@@ -46,7 +50,7 @@ function ActivityPlaceSearch({ onSelect, placeholder }) {
       } catch { setResults([]); }
       finally { setLoading(false); }
     }, 500);
-    timerRef[0] = t;
+    timerRef.current = t;
     return () => clearTimeout(t);
   }, [query]); // eslint-disable-line
 
@@ -406,45 +410,24 @@ export default function ItineraryTab({ trip }) {
   const [expandedConn, setExpandedConn] = useState(null);
   const [transferDraft, setTransferDraft] = useState(null);
 
-  // Confirmación al recortar fechas con días que tenían actividades
-  const [pendingSync, setPendingSync] = useState(null); // { days, removed }
+  // Confirmación al eliminar un día con actividades
+  const [pendingRemoveDay, setPendingRemoveDay] = useState(null); // { dayId, dayDate, activitiesCount }
 
   const {
-    addActivity, updateActivity, deleteActivity, reorderActivities, setItinerary,
+    addActivity, updateActivity, deleteActivity, reorderActivities,
     duplicateActivity, duplicateDay, addExpense,
+    addDayBefore, addDayAfter, removeDay,
   } = useTripStore();
+  const saveStatus = useTripStore(s => s.saveStatus);
+  const isSaving = saveStatus === 'saving';
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  // Sincronizar itinerario con startDate/endDate cada vez que cambien.
-  useEffect(() => {
-    if (!trip?.id || !trip.startDate || !trip.endDate) return;
-
-    const current = trip.itinerary || [];
-    // Caso 1: itinerario vacío → generar de cero, sin preguntar.
-    if (current.length === 0) {
-      setItinerary(trip.id, generateDays(trip.startDate, trip.endDate));
-      return;
-    }
-
-    // Caso 2: ya hay días → sincronizar conservando lo existente.
-    const { days, removedWithActivities } = syncDaysWithDates(current, trip.startDate, trip.endDate);
-
-    // Si la lista resultante es idéntica (mismas fechas en el mismo orden), nada que hacer.
-    const sameDates =
-      days.length === current.length &&
-      days.every((d, i) => d.date === current[i].date && d.dayNumber === current[i].dayNumber);
-    if (sameDates) return;
-
-    if (removedWithActivities.length > 0) {
-      setPendingSync({ days, removed: removedWithActivities });
-    } else {
-      setItinerary(trip.id, days);
-    }
-  }, [trip?.id, trip?.startDate, trip?.endDate, trip?.itinerary?.length]); // eslint-disable-line
-
-  // Itinerario "visible": si todavía no está persistido, mostramos el generado on-the-fly.
+  // Itinerario "visible":
+  //   - Siempre lo ordenamos cronológicamente (fuente única de verdad: la fecha).
+  //   - Si todavía no está materializado pero hay fechas, lo generamos al vuelo
+  //     sólo para visualización (el store lo persiste en addTrip/updateTrip).
   const itinerary = useMemo(() => {
-    if (trip.itinerary?.length > 0) return trip.itinerary;
+    if (trip.itinerary?.length > 0) return normalizeItinerary(trip.itinerary);
     if (trip.startDate && trip.endDate) return generateDays(trip.startDate, trip.endDate);
     return [];
   }, [trip.itinerary, trip.startDate, trip.endDate]);
@@ -584,26 +567,65 @@ export default function ItineraryTab({ trip }) {
     setTransferDraft(null);
   };
 
+  const canExtend = !!(trip.startDate && trip.endDate);
+
   if (itinerary.length === 0) {
-    return <EmptyState icon={<Clock size={36} />} title="Sin itinerario"
-      description="Define las fechas del viaje para generar los días del itinerario." />;
+    return (
+      <EmptyState
+        icon={<Clock size={36} />}
+        title="Sin itinerario"
+        description="Define las fechas del viaje desde el botón Editar para generar los días del itinerario."
+      />
+    );
   }
+
+  const handleRemoveDayRequest = (day) => {
+    const count = day.activities?.length || 0;
+    if (count === 0) {
+      removeDay(trip.id, day.id);
+    } else {
+      setPendingRemoveDay({ dayId: day.id, dayDate: day.date, activitiesCount: count });
+    }
+  };
 
   return (
     <div>
-      {/* Confirmación al borrar días con actividades por recortar fechas */}
-      {pendingSync && (
+      {/* Confirmación al eliminar un día con actividades */}
+      {pendingRemoveDay && (
         <ConfirmDialog
-          title={`Eliminar ${pendingSync.removed.length} día(s) con actividades`}
-          message={`Has reducido las fechas del viaje. Estos días quedan fuera del nuevo rango y se borrarán junto a sus actividades:\n\n${pendingSync.removed.map(d => `• ${formatDate(d.date)} (${d.activities.length} act.)`).join('\n')}\n\n¿Confirmas?`}
+          title="Eliminar día"
+          message={`El día ${formatDate(pendingRemoveDay.dayDate)} tiene ${pendingRemoveDay.activitiesCount} actividad(es). Si lo eliminas, se borrarán también esas actividades. ¿Continuar?`}
           danger
-          onCancel={() => setPendingSync(null)}
+          onCancel={() => setPendingRemoveDay(null)}
           onConfirm={() => {
-            setItinerary(trip.id, pendingSync.days);
-            setPendingSync(null);
+            removeDay(trip.id, pendingRemoveDay.dayId);
+            setPendingRemoveDay(null);
           }}
         />
       )}
+
+      {/* Acciones de rango (extender el viaje) */}
+      <div style={{
+        display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center',
+        justifyContent: 'flex-end', marginBottom: 16,
+      }}>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => addDayBefore(trip.id)}
+          disabled={!canExtend || isSaving}
+          title="Añade un día anterior al primer día del viaje"
+        >
+          <ChevronsLeft size={14} /> + Día antes
+        </button>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => addDayAfter(trip.id)}
+          disabled={!canExtend || isSaving}
+          title="Añade un día después del último día del viaje"
+        >
+          + Día después <ChevronsRight size={14} />
+        </button>
+      </div>
 
       {itinerary.map(day => {
         const sortedActs = (day.activities || []).slice().sort((a, b) => a.order - b.order);
@@ -664,6 +686,13 @@ export default function ItineraryTab({ trip }) {
                 <button className="btn btn-ghost btn-sm"
                   onClick={() => { resetForm(); setAddingDay(day.id); }}>
                   <Plus size={14} /> Añadir
+                </button>
+                <button className="btn btn-ghost btn-sm"
+                  onClick={() => handleRemoveDayRequest(day)}
+                  disabled={isSaving}
+                  title="Eliminar este día"
+                  style={{ color: 'var(--error)' }}>
+                  <Trash2 size={14} />
                 </button>
               </div>
             </div>

@@ -7,6 +7,16 @@
  *   created_at timestamptz
  *
  * Todas las funciones son async; el store las llama con await.
+ *
+ * Política de seed:
+ *   - En DESARROLLO (import.meta.env.DEV === true) y solo si nunca se sembró
+ *     antes (flag en localStorage), si la tabla está vacía se inyectan los
+ *     datos de ejemplo. Es para que el primer arranque no quede en blanco.
+ *   - En PRODUCCIÓN nunca se siembra automáticamente. Si el usuario quiere
+ *     datos de ejemplo, debe llamar a `seedDemoData()` explícitamente.
+ *   - Una vez sembrado (o usado por el usuario), la flag impide reinjecciones
+ *     accidentales. Si el usuario borra todos sus viajes, la lista queda
+ *     vacía y NO se vuelve a sembrar.
  */
 
 import { supabase } from '../lib/supabase.js';
@@ -25,27 +35,75 @@ function rowToTrip(row) {
   return row.data;
 }
 
-// ── Trips ─────────────────────────────────────────────────────────────────────
+const SEED_FLAG = 'travelmind:seeded';
 
-export async function getTrips() {
+function hasSeededBefore() {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(SEED_FLAG) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markAsSeeded() {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(SEED_FLAG, '1');
+  } catch { /* ignore */ }
+}
+
+function isDevEnv() {
+  try {
+    return Boolean(import.meta.env && import.meta.env.DEV);
+  } catch {
+    return false;
+  }
+}
+
+// ── Consulta cruda (sin seed) ────────────────────────────────────────────────
+// Lanza Error si la consulta falla. Nunca devuelve `[]` enmascarando un fallo.
+async function fetchTripsRaw() {
   const { data, error } = await supabase
     .from('trips')
     .select('data')
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error al cargar viajes:', error);
-    return [];
+    // El llamador (store._persist o loadTrips) decide cómo reportarlo al usuario.
+    throw new Error(`No se pudieron cargar los viajes: ${error.message}`);
+  }
+  return (data || []).map(rowToTrip);
+}
+
+async function saveTripRaw(trip) {
+  const { error } = await supabase
+    .from('trips')
+    .upsert(tripToRow(trip));
+  if (error) throw new Error(`Error al guardar viaje: ${error.message}`);
+}
+
+// ── Trips ────────────────────────────────────────────────────────────────────
+
+export async function getTrips() {
+  const trips = await fetchTripsRaw();
+
+  // Seed automático sólo en desarrollo y sólo la PRIMERA vez.
+  // Si la flag está marcada o estamos en producción, no sembramos: una BD
+  // vacía es información válida ("el usuario no tiene viajes todavía"),
+  // no debemos inyectar datos demo encima.
+  if (trips.length === 0 && isDevEnv() && !hasSeededBefore()) {
+    try {
+      const seed = getSeedData();
+      await Promise.all(seed.map(t => saveTripRaw(t)));
+      markAsSeeded();
+      return await fetchTripsRaw();
+    } catch (e) {
+      console.error('Seed automático de desarrollo falló:', e);
+      // Si el seed falla, devolvemos la lista vacía real.
+      return [];
+    }
   }
 
-  // Primera vez — sembrar datos de ejemplo
-  if (data.length === 0) {
-    const seed = getSeedData();
-    await Promise.all(seed.map(t => saveTrip(t)));
-    return seed;
-  }
-
-  return data.map(rowToTrip);
+  return trips;
 }
 
 export async function getTrip(id) {
@@ -60,12 +118,11 @@ export async function getTrip(id) {
 }
 
 export async function saveTrip(trip) {
-  const { error } = await supabase
-    .from('trips')
-    .upsert(tripToRow(trip));
-
-  if (error) throw new Error(`Error al guardar viaje: ${error.message}`);
-  return getTrips();
+  await saveTripRaw(trip);
+  // Marcamos la flag para que ninguna ejecución posterior re-siembre,
+  // incluso si el usuario borra todos sus viajes.
+  markAsSeeded();
+  return fetchTripsRaw();
 }
 
 export async function deleteTrip(id) {
@@ -75,7 +132,24 @@ export async function deleteTrip(id) {
     .eq('id', id);
 
   if (error) throw new Error(`Error al eliminar viaje: ${error.message}`);
-  return getTrips();
+  return fetchTripsRaw();
+}
+
+// ── Seed bajo demanda ────────────────────────────────────────────────────────
+/**
+ * Acción explícita: pobla la BD con viajes de ejemplo. Pensado para un
+ * botón "Cargar viajes de ejemplo" cuando el usuario está en una BD vacía
+ * y quiere ver la app con datos. Si ya hay viajes, NO sobreescribe.
+ */
+export async function seedDemoData() {
+  const trips = await fetchTripsRaw();
+  if (trips.length > 0) {
+    throw new Error('Ya hay viajes guardados. No se siembra para evitar duplicados.');
+  }
+  const seed = getSeedData();
+  await Promise.all(seed.map(t => saveTripRaw(t)));
+  markAsSeeded();
+  return fetchTripsRaw();
 }
 
 // ── Export / Import ───────────────────────────────────────────────────────────
@@ -85,7 +159,7 @@ export async function importData(jsonData) {
     throw new Error('Formato de datos inválido');
   }
 
-  const existing = await getTrips();
+  const existing = await fetchTripsRaw();
   const existingIds = new Set(existing.map(t => t.id));
   const newTrips = jsonData.trips.filter(t => !existingIds.has(t.id));
 
@@ -95,7 +169,8 @@ export async function importData(jsonData) {
       .upsert(newTrips.map(tripToRow));
 
     if (error) throw new Error(`Error al importar viajes: ${error.message}`);
+    markAsSeeded(); // si el usuario importa, también marcamos para no re-sembrar
   }
 
-  return getTrips();
+  return fetchTripsRaw();
 }

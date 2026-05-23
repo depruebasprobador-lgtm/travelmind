@@ -21,12 +21,18 @@ export default function DataActions() {
     if (!file) return;
     try {
       const data = await readFileAsJSON(file);
-      importData(data);
+      const result = await importData(data);
+      if (!result) {
+        // el bridge ya emite el toast con mensaje user-friendly
+        return;
+      }
       toast(`Importados ${data.trips?.length || 0} viajes correctamente`, 'success');
     } catch (err) {
-      toast(err.message || 'Error al importar', 'error');
+      // Error al parsear el JSON (no es un fallo de persistencia)
+      toast(err.message || 'No se pudo leer el archivo.', 'error');
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
     }
-    fileRef.current.value = '';
   };
 
   return (

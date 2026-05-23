@@ -4,6 +4,7 @@ import {
   MapPin, Calendar, TrendingUp, DollarSign, Clock, Check,
 } from 'lucide-react';
 import { useRecurringStore, FREQUENCIES, BREAKDOWN_CATS } from '../data/recurringStore';
+import { formatDate, compareISODates } from '../utils/helpers';
 
 /* ─── helpers ─────────────────────────────────────────────── */
 function freq(value) {
@@ -14,7 +15,8 @@ function fmt(n) {
 }
 function fmtDate(d) {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  // Usamos el helper UTC-safe para evitar off-by-one en TZ con offset negativo.
+  return formatDate(d) || '—';
 }
 function monthlyOf(trip) {
   return (trip.estimated_cost || 0) * freq(trip.frequency).perMonth;
@@ -202,7 +204,8 @@ function DetailModal({ trip, onClose, onEdit, onAddHistory, onRemoveHistory }) {
     setSaving(false);
   }
 
-  const sortedHistory = [...(trip.history || [])].sort((a, b) => new Date(b.date) - new Date(a.date));
+  // Orden descendente por fecha (más reciente primero). UTC-safe.
+  const sortedHistory = [...(trip.history || [])].sort((a, b) => compareISODates(b.date, a.date));
   const avgCost = sortedHistory.length
     ? sortedHistory.reduce((a, e) => a + Number(e.cost), 0) / sortedHistory.length
     : null;

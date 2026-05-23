@@ -67,20 +67,24 @@ export default function TripDetail() {
   const totalSpent = (trip.expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
 
   const handleDelete = async () => {
-    await deleteTripAction(id);
+    const r = await deleteTripAction(id);
+    if (r?.ok === false) return; // el StoreErrorBridge ya emite el toast de error
     navigate('/');
     toast('Viaje eliminado', 'info');
   };
 
-  const handleDuplicate = () => {
-    duplicateTrip(id);
+  const handleDuplicate = async () => {
+    const r = await duplicateTrip(id);
+    if (r?.ok === false) return;
     toast('Viaje duplicado', 'success');
     navigate('/');
   };
 
-  const handleArchive = () => {
-    archiveTrip(id);
-    toast(trip.archived ? 'Viaje desarchivado' : 'Viaje archivado', 'success');
+  const handleArchive = async () => {
+    const wasArchived = trip.archived;
+    const r = await archiveTrip(id);
+    if (r?.ok === false) return;
+    toast(wasArchived ? 'Viaje desarchivado' : 'Viaje archivado', 'success');
   };
 
   const handleExportJSON = () => {

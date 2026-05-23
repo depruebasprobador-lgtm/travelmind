@@ -4603,3 +4603,355 @@ ul, ol { list-style: none; }
   .tt-leg-row { font-size: 0.78rem; }
   .tt-layover { font-size: 0.74rem; padding: 5px 8px; margin-left: 18px; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Fase 3 — Responsive para móviles muy pequeños (≤400px / iPhone SE)
+   Objetivo: cero scroll horizontal accidental + botones e inputs que envuelvan.
+   ───────────────────────────────────────────────────────────────────────── */
+@media (max-width: 400px) {
+  /* page-container: padding lateral más justo para ganar ancho real */
+  .page-container {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  /* Dashboard toolbar (search + sort + import/export): wrap completo */
+  .page-container > div[style*="justify-content: space-between"] {
+    /* Patrones inline-style del toolbar — el flex-wrap ya está, garantizamos
+       que cada hijo pueda ocupar 100%. */
+    gap: 8px !important;
+  }
+
+  /* SearchBar: no fijar minWidth en móvil pequeño, ocupar todo el ancho. */
+  .search-bar,
+  .search-bar input {
+    min-width: 0 !important;
+    width: 100%;
+  }
+
+  /* Selects de la toolbar: 100% en pantalla mini */
+  .page-container .form-input[style*="minWidth: 160"],
+  .page-container select.form-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Cards y grids genéricos: nunca fuercen min-width > viewport */
+  .trips-grid,
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  /* Stats: una sola columna para que no se aplasten números */
+  .stat-card {
+    padding: 12px 14px;
+  }
+  .stat-info h3 { font-size: 1.2rem; }
+
+  /* Trip header (detalle): botones wrap */
+  .trip-header-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .trip-header-actions .btn {
+    flex: 1 1 calc(50% - 6px);
+    justify-content: center;
+    font-size: 0.78rem;
+    padding: 6px 8px;
+  }
+
+  /* Pestañas del detalle: scroll horizontal interno controlado */
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+  }
+  .tabs .tab {
+    flex-shrink: 0;
+    font-size: 0.82rem;
+    padding: 8px 12px;
+  }
+
+  /* ItineraryTab: barra superior de acciones de día — wrap */
+  .page-container [class*="section-header"] {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Modales: ocupan casi todo el ancho de pantalla */
+  .modal {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    margin: 8px;
+  }
+  .modal-body {
+    padding: 16px;
+  }
+  .modal-footer {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .modal-footer .btn {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* form-row: en móvil mini siempre una columna */
+  .form-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .form-row .form-group {
+    width: 100%;
+  }
+
+  /* Inputs y selects: 100% del contenedor sin overflow */
+  .form-input,
+  .form-textarea {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* PlacesTab card grid: una columna, sin minmax desbordando */
+  .page-container div[style*="grid-template-columns"][style*="auto-fill"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* TripCard: padding ajustado */
+  .trip-card-body {
+    padding: 12px;
+  }
+  .trip-card-meta {
+    font-size: 0.78rem;
+    gap: 6px;
+  }
+  .trip-card-quick-actions {
+    flex-wrap: wrap;
+  }
+  .trip-card-action-btn {
+    flex: 1 1 calc(33% - 4px);
+    justify-content: center;
+    font-size: 0.72rem;
+    padding: 6px 4px;
+  }
+
+  /* FAB: tamaño y posición un poco más discreta */
+  .fab {
+    width: 52px;
+    height: 52px;
+    right: 16px;
+    bottom: 16px;
+  }
+
+  /* Hero del Dashboard */
+  .hero h1 { font-size: 1.4rem; }
+  .hero p { font-size: 0.88rem; }
+
+  /* Save indicator: que no sobresalga del topbar */
+  .save-indicator {
+    font-size: 0.75rem;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Feature: Modo Hoy / Durante el viaje — TodayTripWidget
+   Tarjeta destacada en Dashboard. Dos variantes: --ongoing (viaje en curso)
+   y --upcoming (próximo en ≤7 días).
+   ───────────────────────────────────────────────────────────────────────── */
+.today-widget {
+  position: relative;
+  border-radius: var(--radius-lg, 14px);
+  padding: 22px 24px;
+  margin: 0 0 28px;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.18);
+  overflow: hidden;
+}
+
+.today-widget--ongoing {
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+}
+
+.today-widget--upcoming {
+  background: linear-gradient(135deg, #0EA5E9 0%, #6366F1 100%);
+  box-shadow: 0 8px 24px rgba(14, 165, 233, 0.18);
+}
+
+.today-widget-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.today-widget-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.today-widget-title {
+  margin: 0;
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.today-widget-progress {
+  background: rgba(255, 255, 255, 0.18);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.today-widget-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  opacity: 0.92;
+  margin: 0 0 14px;
+  flex-wrap: wrap;
+}
+
+.today-widget-meta-sep {
+  opacity: 0.5;
+}
+
+.today-widget-next {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.today-widget-next-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.today-widget-next-text strong {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.today-widget-next-name {
+  font-size: 0.9rem;
+  opacity: 0.95;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.today-widget-next--empty {
+  background: rgba(255, 255, 255, 0.10);
+  font-style: italic;
+  opacity: 0.88;
+}
+
+.today-widget-pending {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  opacity: 0.92;
+  margin: 0 0 14px;
+}
+
+.today-widget-pending--done {
+  opacity: 0.78;
+}
+
+.today-widget-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.today-widget-cta {
+  background: #fff;
+  color: var(--primary, #4F46E5);
+  border: none;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+}
+
+.today-widget-cta:hover {
+  background: #f3f4f6;
+  color: var(--primary, #4F46E5);
+}
+
+.today-widget-cta-secondary {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  padding: 9px 16px;
+}
+
+.today-widget-cta-secondary:hover {
+  background: rgba(255, 255, 255, 0.26);
+  color: #fff;
+}
+
+/* Móvil pequeño (≤400px): no encogemos el texto principal pero apretamos
+   el resto para que quepa sin scroll horizontal. */
+@media (max-width: 400px) {
+  .today-widget {
+    padding: 18px 16px;
+    margin-bottom: 20px;
+  }
+  .today-widget-title {
+    font-size: 1.35rem;
+  }
+  .today-widget-header {
+    gap: 8px;
+  }
+  .today-widget-progress {
+    font-size: 0.75rem;
+    padding: 3px 10px;
+  }
+  .today-widget-meta {
+    font-size: 0.78rem;
+  }
+  .today-widget-next {
+    padding: 8px 10px;
+  }
+  .today-widget-next-text {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .today-widget-actions {
+    flex-direction: column;
+  }
+  .today-widget-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

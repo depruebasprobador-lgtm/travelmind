@@ -8,7 +8,7 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import useTripStore from '../../data/store';
-import { formatCurrency, getDaysBetween } from '../../utils/helpers';
+import { formatCurrency, getDaysBetween, formatDateShort, formatDate } from '../../utils/helpers';
 import { useToast } from '../Toast';
 
 // ── Category palette ──────────────────────────────────────────────────────────
@@ -215,8 +215,7 @@ export default function BudgetCalculator({ trip, onClose }) {
             {/* Trip dates hint */}
             {trip.startDate && trip.endDate && (
               <p className="calc-dates-hint">
-                📅 Viaje: {new Date(trip.startDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} —{' '}
-                {new Date(trip.endDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                📅 Viaje: {formatDateShort(trip.startDate)} — {formatDate(trip.endDate)}
                 {' '}({tripDays} días)
               </p>
             )}

@@ -12,6 +12,12 @@ import Modal from '../components/Modal';
 import PlaceSearch from '../components/PlaceSearch';
 import EmptyState from '../components/EmptyState';
 import { useToast } from '../components/Toast';
+import {
+  formatDate as formatDateUTC,
+  formatISODateCustom,
+  todayISO,
+  diffDaysISO,
+} from '../utils/helpers';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -77,24 +83,22 @@ function budgetTotal(budget) {
 
 function daysBetween(from, to) {
   if (!from || !to) return null;
-  const d = (new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24);
-  return d > 0 ? Math.round(d) : null;
+  // diffDaysISO es UTC-safe sobre strings 'YYYY-MM-DD'
+  const d = diffDaysISO(from, to);
+  return d > 0 ? d : null;
 }
 
-function formatDate(iso) {
-  if (!iso) return '';
-  return new Date(iso + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-}
+// Helper UTC-safe importado de utils/helpers (alias local para conservar el
+// nombre que ya usa el resto del archivo).
+const formatDate = (iso) => formatDateUTC(iso);
 
-// Countdown: calcula estado relativo a hoy
+// Countdown: calcula estado relativo a hoy usando comparación lexicográfica
+// sobre strings 'YYYY-MM-DD' (todayISO + diffDaysISO). Sin riesgo de off-by-one.
 function countdownInfo(from, to) {
   if (!from) return null;
-  const today = new Date(); today.setHours(0,0,0,0);
-  const start = new Date(from + 'T00:00:00');
-  const end   = to ? new Date(to + 'T00:00:00') : start;
-  const dayMs = 1000 * 60 * 60 * 24;
-  const daysToStart = Math.round((start - today) / dayMs);
-  const daysToEnd   = Math.round((end   - today) / dayMs);
+  const today = todayISO();
+  const daysToStart = diffDaysISO(today, from);
+  const daysToEnd   = diffDaysISO(today, to || from);
 
   if (daysToStart > 0)  return { type: 'future',   days: daysToStart, label: daysToStart === 1 ? 'Falta 1 día' : `Faltan ${daysToStart} días` };
   if (daysToStart === 0) return { type: 'today',   days: 0,            label: '¡Hoy empieza!' };
@@ -841,11 +845,24 @@ export default function FutureDestinations() {
       notes: dest.notes,
       places: (dest.places || []).map(p => ({ ...p })),
     });
-    await updateDestination(dest.id, { converted: true, convertedTripId: newTrip?.id });
-    toast('¡Convertido en viaje! Redirigiendo...', 'success');
+    // Si addTrip falló (devuelve null), el bridge ya emitió el toast de error.
+    // No marcamos el destino como convertido ni navegamos.
+    if (!newTrip?.id) {
+      setConvertConfirm(null);
+      return;
+    }
+    // El viaje YA existe. Intentamos marcar el destino. Si esto falla, el bridge
+    // muestra error pero NO revertimos la creación: el usuario seguirá teniendo el
+    // viaje (mejor un destino sin marcar que perder el viaje recién creado).
+    const upd = await updateDestination(dest.id, { converted: true, convertedTripId: newTrip.id });
+    if (upd && upd.ok === false) {
+      toast('Viaje creado, pero no se pudo marcar el destino como convertido.', 'error');
+    } else {
+      toast('¡Convertido en viaje! Redirigiendo...', 'success');
+    }
     setConvertConfirm(null);
     setPanelDest(null);
-    setTimeout(() => navigate(newTrip?.id ? `/trip/${newTrip.id}` : '/'), 800);
+    setTimeout(() => navigate(`/trip/${newTrip.id}`), 800);
   };
 
   // ── Quick idea ──
@@ -1184,7 +1201,7 @@ function DestinationCard({ dest, active, onOpen, onEdit, onDelete, onConvert }) 
             {days && (
               <span className="fd-card-chip">
                 <Calendar size={11} /> {days}d
-                {dest.dates?.from && <span style={{ marginLeft: 3, opacity: 0.7 }}>{new Date(dest.dates.from + 'T00:00:00').toLocaleDateString('es-ES', { month: 'short', year: '2-digit' })}</span>}
+                {dest.dates?.from && <span style={{ marginLeft: 3, opacity: 0.7 }}>{formatISODateCustom(dest.dates.from, { month: 'short', year: '2-digit' })}</span>}
               </span>
             )}
             {total > 0 && (

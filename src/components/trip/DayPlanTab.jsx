@@ -8,7 +8,7 @@ import {
   Navigation2, Bed, Bus, AlertCircle, Zap
 } from 'lucide-react';
 import useTripStore from '../../data/store';
-import { formatDate } from '../../utils/helpers';
+import { formatDate, todayISO, normalizeItinerary } from '../../utils/helpers';
 import EmptyState from '../EmptyState';
 
 // ── Leaflet marker fix ─────────────────────────────────────────────────────
@@ -67,10 +67,6 @@ function formatTime(timeStr) {
   return `${h}:${m}`;
 }
 
-function todayISO() {
-  return new Date().toISOString().split('T')[0];
-}
-
 // Colores para marcadores secuenciales
 const MARKER_COLORS = [
   '#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
@@ -80,7 +76,12 @@ const MARKER_COLORS = [
 // ── Componente principal ───────────────────────────────────────────────────
 export default function DayPlanTab({ trip }) {
   const { toggleActivityComplete } = useTripStore();
-  const itinerary = trip.itinerary || [];
+  // Siempre ordenado cronológicamente — el array persistido puede venir
+  // desordenado si se importó de un export antiguo.
+  const itinerary = useMemo(
+    () => normalizeItinerary(trip.itinerary || []),
+    [trip.itinerary],
+  );
 
   // Selecciona el día: hoy si está dentro del viaje, sino el primero
   const defaultDate = useMemo(() => {

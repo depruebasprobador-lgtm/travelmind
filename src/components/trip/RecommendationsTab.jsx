@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapPin, Plus, Check, Compass, Loader, RefreshCw } from 'lucide-react';
 import useTripStore from '../../data/store';
+import { normalizeItinerary, formatISODateCustom } from '../../utils/helpers';
 
 const CATEGORIES = [
   { id: 'all',        label: 'Todos',        icon: '🗺️', tag: null,         color: null,      bg: null },
@@ -43,8 +44,15 @@ export default function RecommendationsTab({ trip }) {
   const [selectedDay, setSelectedDay]     = useState('');
 
   const { addPlace, addActivity } = useTripStore();
+  const saveStatus = useTripStore(s => s.saveStatus);
+  const isSaving = saveStatus === 'saving';
+  // IDs de POIs cuya acción está en vuelo (evita doble click + check verde falso)
+  const [pendingIds, setPendingIds] = useState(new Set());
 
-  const itinerary = trip.itinerary?.filter(d => d.activities !== undefined) || [];
+  const itinerary = useMemo(
+    () => normalizeItinerary((trip.itinerary || []).filter(d => d.activities !== undefined)),
+    [trip.itinerary],
+  );
 
   // ─── Fetch recommendations ────────────────────────────────────────────────
   const fetchRecommendations = useCallback(async () => {
@@ -162,10 +170,20 @@ out 60;`;
 
   useEffect(() => { fetchRecommendations(); }, [fetchRecommendations]);
 
+  const markPending = (id, on) => {
+    setPendingIds(prev => {
+      const next = new Set(prev);
+      if (on) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+
   // ─── Add to Places ────────────────────────────────────────────────────────
-  const handleAddToPlaces = (poi) => {
+  const handleAddToPlaces = async (poi) => {
+    if (pendingIds.has(poi.id) || addedPlaces.has(poi.id)) return;
     const cat = CATEGORIES.find(c => c.id === poi.category);
-    addPlace(trip.id, {
+    markPending(poi.id, true);
+    const r = await addPlace(trip.id, {
       name: poi.name,
       address: poi.address || '',
       lat: poi.lat,
@@ -174,14 +192,23 @@ out 60;`;
       link: poi.website || '',
       description: '',
     });
+    markPending(poi.id, false);
+    if (!r?.ok) return; // el bridge mostró el error; no marcamos como añadido
     setAddedPlaces(prev => new Set([...prev, poi.id]));
   };
 
   // ─── Add to Itinerary ─────────────────────────────────────────────────────
-  const handleAddToItinerary = (poi) => {
+  const handleAddToItinerary = async (poi) => {
     if (!itinerary.length) return;
+    if (pendingIds.has(poi.id) || addedItinerary.has(poi.id)) return;
     if (itinerary.length === 1) {
-      addActivity(trip.id, itinerary[0].id, { name: poi.name, place: poi.address || poi.name });
+      markPending(poi.id, true);
+      const r = await addActivity(trip.id, itinerary[0].id, {
+        name: poi.name,
+        place: poi.address || poi.name,
+      });
+      markPending(poi.id, false);
+      if (!r?.ok) return;
       setAddedItinerary(prev => new Set([...prev, poi.id]));
     } else {
       setDayPickerPoi(poi);
@@ -189,13 +216,18 @@ out 60;`;
     }
   };
 
-  const confirmItinerary = () => {
+  const confirmItinerary = async () => {
     if (!dayPickerPoi || !selectedDay) return;
-    addActivity(trip.id, selectedDay, {
-      name: dayPickerPoi.name,
-      place: dayPickerPoi.address || dayPickerPoi.name,
+    if (pendingIds.has(dayPickerPoi.id)) return;
+    const poi = dayPickerPoi;
+    markPending(poi.id, true);
+    const r = await addActivity(trip.id, selectedDay, {
+      name: poi.name,
+      place: poi.address || poi.name,
     });
-    setAddedItinerary(prev => new Set([...prev, dayPickerPoi.id]));
+    markPending(poi.id, false);
+    if (!r?.ok) return;
+    setAddedItinerary(prev => new Set([...prev, poi.id]));
     setDayPickerPoi(null);
   };
 
@@ -382,7 +414,7 @@ out 60;`;
                   <button
                     className="btn btn-sm"
                     onClick={() => handleAddToPlaces(poi)}
-                    disabled={inPlaces}
+                    disabled={inPlaces || pendingIds.has(poi.id)}
                     style={{
                       flex: 1,
                       background: inPlaces ? 'var(--success)' : 'var(--primary)',
@@ -392,18 +424,22 @@ out 60;`;
                     }}>
                     {inPlaces
                       ? <><Check size={12} /> Guardado</>
-                      : <><Plus size={12} /> Lugares</>}
+                      : pendingIds.has(poi.id)
+                        ? 'Guardando...'
+                        : <><Plus size={12} /> Lugares</>}
                   </button>
 
                   {itinerary.length > 0 && (
                     <button
                       className="btn btn-sm btn-secondary"
                       onClick={() => handleAddToItinerary(poi)}
-                      disabled={inItinerary}
+                      disabled={inItinerary || pendingIds.has(poi.id)}
                       style={{ flex: 1, fontSize: '0.77rem' }}>
                       {inItinerary
                         ? <><Check size={12} /> En plan</>
-                        : <>📅 Itinerario</>}
+                        : pendingIds.has(poi.id)
+                          ? 'Guardando...'
+                          : <>📅 Itinerario</>}
                     </button>
                   )}
                 </div>
@@ -437,7 +473,7 @@ out 60;`;
                 <option key={day.id} value={day.id}>
                   Día {day.dayNumber}
                   {day.date
-                    ? ' — ' + new Date(day.date + 'T12:00:00').toLocaleDateString('es-ES', {
+                    ? ' — ' + formatISODateCustom(day.date, {
                         weekday: 'short', day: 'numeric', month: 'short',
                       })
                     : ''}
@@ -448,7 +484,10 @@ out 60;`;
               <button className="btn btn-secondary" onClick={() => setDayPickerPoi(null)}>
                 Cancelar
               </button>
-              <button className="btn btn-primary" onClick={confirmItinerary}>
+              <button
+                className="btn btn-primary"
+                onClick={confirmItinerary}
+                disabled={isSaving || (dayPickerPoi && pendingIds.has(dayPickerPoi.id))}>
                 Añadir
               </button>
             </div>

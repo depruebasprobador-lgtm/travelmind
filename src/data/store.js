@@ -1,51 +1,150 @@
 import { create } from 'zustand';
 import * as storage from './storage.js';
-import { generateId } from '../utils/helpers.js';
+import {
+  generateId,
+  syncDaysWithDates,
+  generateDays,
+  normalizeItinerary,
+  getItineraryBounds,
+  addDaysISO,
+  compareISODates,
+} from '../utils/helpers.js';
+
+// Mensajes user-friendly por operación. La clave es el código que cada
+// acción pasa a `_persist`; si no se reconoce, se usa `default`.
+const ERROR_MESSAGES = {
+  default:           'No se pudo guardar el cambio. Inténtalo de nuevo.',
+  addTrip:           'No se pudo crear el viaje. Inténtalo de nuevo.',
+  updateTrip:        'No se pudo guardar el cambio del viaje.',
+  deleteTrip:        'No se pudo eliminar el viaje.',
+  duplicateTrip:     'No se pudo duplicar el viaje.',
+  archiveTrip:       'No se pudo archivar el viaje.',
+  itinerary:         'No se pudo actualizar el itinerario.',
+  activity:          'No se pudo guardar la actividad.',
+  day:               'No se pudo actualizar el día.',
+  removeDay:         'No se pudo eliminar el día.',
+  addDayBefore:      'No se pudo añadir el día anterior.',
+  addDayAfter:       'No se pudo añadir el día posterior.',
+  accommodation:     'No se pudo guardar el alojamiento.',
+  transport:         'No se pudo guardar el transporte.',
+  place:             'No se pudo guardar el lugar.',
+  expense:           'No se pudo guardar el gasto.',
+  participant:       'No se pudo guardar el participante.',
+  checklist:         'No se pudo guardar la checklist.',
+  budgetEstimation:  'No se pudo guardar la estimación de presupuesto.',
+  importData:        'No se pudo importar los datos.',
+  loadTrips:         'No se pudieron cargar los viajes. Revisa tu conexión e inténtalo de nuevo.',
+};
 
 const useTripStore = create((set, get) => ({
   trips: [],
   currentTrip: null,
   filters: { search: '', status: '', country: '' },
-  saveStatus: 'idle', // idle | saving | saved
+  saveStatus: 'idle', // idle | saving | saved | error
+  saveError: null,    // { id, message, operation } cuando falla la persistencia
+
+  /**
+   * Pisa el toast de error actual (o lo ignora si ya no aplica). El
+   * StoreErrorBridge llama a esto tras emitir el toast para que no se
+   * vuelva a emitir si el componente se desmonta y remonta. Programa
+   * además el retorno a `idle` del indicador tras 4s, salvo que se
+   * haya iniciado otro save mientras tanto.
+   */
+  ackSaveError: () => {
+    if (get().saveError) set({ saveError: null });
+    setTimeout(() => {
+      if (get().saveStatus === 'error') set({ saveStatus: 'idle' });
+    }, 4000);
+  },
 
   // ── Indicador de guardado ────────────────────────────────────────────────
   // Recibe una Promise del storage, gestiona el estado de guardado y
   // actualiza `trips` cuando resuelve.
-  _persist: async (storagePromise) => {
+  //
+  // En vez de re-lanzar el error (que provocaba "unhandled promise rejection"
+  // en callers que no lo esperan), capturamos el fallo en estado: setea
+  // `saveStatus: 'error'` + `saveError`. El bridge React lo escucha y
+  // emite el toast. La acción que llamó recibe `{ ok: false }` y puede
+  // decidir si abortar el resto del flujo.
+  _persist: async (storagePromise, options = {}) => {
+    const operation = options.operation || 'default';
     set({ saveStatus: 'saving' });
     try {
       const trips = await storagePromise;
-      set({ trips, saveStatus: 'saved' });
-      setTimeout(() => set({ saveStatus: 'idle' }), 2000);
-      return trips;
+      set({ trips, saveStatus: 'saved', saveError: null });
+      setTimeout(() => {
+        // Sólo bajamos a idle si nadie ha empezado otro save mientras tanto
+        if (get().saveStatus === 'saved') set({ saveStatus: 'idle' });
+      }, 2000);
+      return { ok: true, trips };
     } catch (e) {
-      console.error('Error al guardar:', e);
-      set({ saveStatus: 'idle' });
-      throw e;
+      console.error(`[TravelMind] Persistencia fallida (${operation}):`, e);
+      const errorObj = {
+        id: Date.now() + Math.random(),
+        message: ERROR_MESSAGES[operation] || ERROR_MESSAGES.default,
+        operation,
+      };
+      set({ saveStatus: 'error', saveError: errorObj });
+      // No volvemos a 'idle' automáticamente: el bridge lo limpia al emitir.
+      return { ok: false, error: e };
     }
   },
 
   // ── Load ─────────────────────────────────────────────────────────────────
+  // Si la consulta a Supabase falla, exponemos el fallo vía `saveError` para
+  // que el StoreErrorBridge emita un toast user-friendly. No re-lanzamos.
+  // Si todo va bien, actualizamos `trips`. Si la BD está vacía, dejamos
+  // `trips: []` (estado legítimo, no es un error).
   loadTrips: async () => {
-    const trips = await storage.getTrips();
-    set({ trips });
+    try {
+      const trips = await storage.getTrips();
+      set({ trips });
+      return { ok: true, trips };
+    } catch (e) {
+      console.error('[TravelMind] loadTrips falló:', e);
+      const errorObj = {
+        id: Date.now() + Math.random(),
+        message: ERROR_MESSAGES.loadTrips,
+        operation: 'loadTrips',
+      };
+      set({ saveError: errorObj });
+      return { ok: false, error: e };
+    }
   },
 
   loadTrip: async (id) => {
-    const trip = await storage.getTrip(id);
-    set({ currentTrip: trip });
-    return trip;
+    try {
+      const trip = await storage.getTrip(id);
+      set({ currentTrip: trip });
+      return trip;
+    } catch (e) {
+      console.error('[TravelMind] loadTrip falló:', e);
+      const errorObj = {
+        id: Date.now() + Math.random(),
+        message: ERROR_MESSAGES.loadTrips,
+        operation: 'loadTrips',
+      };
+      set({ saveError: errorObj });
+      return null;
+    }
   },
 
   // ── Trip CRUD ─────────────────────────────────────────────────────────────
   addTrip: async (tripData) => {
+    // Si vienen fechas y NO viene un itinerary explícito, lo generamos
+    // ya sincronizado para no depender de hidratación lazy en el detalle.
+    const baseItinerary = Array.isArray(tripData.itinerary) ? tripData.itinerary : [];
+    const itinerary = (tripData.startDate && tripData.endDate && baseItinerary.length === 0)
+      ? generateDays(tripData.startDate, tripData.endDate)
+      : normalizeItinerary(baseItinerary);
+
     const trip = {
       ...tripData,
       id: generateId(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       archived: false,
-      itinerary: tripData.itinerary || [],
+      itinerary,
       accommodations: tripData.accommodations || [],
       transports: tripData.transports || [],
       places: tripData.places || [],
@@ -54,29 +153,90 @@ const useTripStore = create((set, get) => ({
       checklist: tripData.checklist || [],
       budgetEstimation: tripData.budgetEstimation || null,
     };
-    await get()._persist(storage.saveTrip(trip));
+    const r = await get()._persist(storage.saveTrip(trip), { operation: 'addTrip' });
+    if (!r.ok) return null;
     return trip;
   },
 
-  updateTrip: async (id, updates) => {
+  /**
+   * Setter genérico. Si los `updates` modifican `startDate` o `endDate`
+   * y NO se pasa un `itinerary` explícito, el array de días se sincroniza
+   * atómicamente para que la fuente de verdad (fechas) y el derivado
+   * (itinerary) nunca queden desincronizados.
+   *
+   * Si la sincronización dejaría fuera días con actividades:
+   *   - sin opciones.force → aborta y devuelve { ok: false, removed }
+   *   - opciones.force === true → aplica el cambio descartando esos días
+   *
+   * Devuelve siempre { ok, removed? } para que el caller pueda actuar
+   * sobre la confirmación si la necesita.
+   */
+  updateTrip: async (id, updates, options = {}) => {
     const trip = get().trips.find(t => t.id === id);
-    if (!trip) return;
-    const updated = { ...trip, ...updates, updatedAt: new Date().toISOString() };
-    await get()._persist(storage.saveTrip(updated));
+    if (!trip) return { ok: false };
+
+    const finalUpdates = { ...updates };
+    const datesChanged = (
+      (updates.startDate !== undefined && updates.startDate !== trip.startDate) ||
+      (updates.endDate !== undefined && updates.endDate !== trip.endDate)
+    );
+
+    // Sólo sincronizamos si el caller NO pasó un itinerary explícito.
+    if (datesChanged && updates.itinerary === undefined) {
+      const start = updates.startDate ?? trip.startDate;
+      const end = updates.endDate ?? trip.endDate;
+      if (start && end && compareISODates(end, start) >= 0) {
+        const { days, removedWithActivities } = syncDaysWithDates(
+          trip.itinerary || [], start, end,
+        );
+        if (removedWithActivities.length > 0 && !options.force) {
+          return { ok: false, removed: removedWithActivities, pendingDays: days };
+        }
+        finalUpdates.itinerary = days;
+      } else if (!start || !end) {
+        // Sin rango completo no podemos sincronizar — dejamos el array como está.
+      }
+    } else if (updates.itinerary !== undefined) {
+      // Si pasan itinerary explícito, lo normalizamos siempre.
+      finalUpdates.itinerary = normalizeItinerary(updates.itinerary);
+    }
+
+    const updated = { ...trip, ...finalUpdates, updatedAt: new Date().toISOString() };
+    const r = await get()._persist(
+      storage.saveTrip(updated),
+      { operation: options.operation || 'updateTrip' },
+    );
+    if (!r.ok) return { ok: false, error: true };
     if (get().currentTrip?.id === id) set({ currentTrip: updated });
+    return { ok: true };
+  },
+
+  /**
+   * Previsualiza el resultado de cambiar las fechas SIN persistir nada.
+   * Útil para que TripForm pueda mostrar un diálogo de confirmación
+   * antes de borrar días con actividades.
+   */
+  previewDateChange: (id, startDate, endDate) => {
+    const trip = get().trips.find(t => t.id === id);
+    if (!trip) return { days: [], removed: [] };
+    const { days, removedWithActivities } = syncDaysWithDates(
+      trip.itinerary || [], startDate, endDate,
+    );
+    return { days, removed: removedWithActivities };
   },
 
   deleteTrip: async (id) => {
-    const trips = await storage.deleteTrip(id);
+    const r = await get()._persist(storage.deleteTrip(id), { operation: 'deleteTrip' });
+    if (!r.ok) return { ok: false };
     set({
-      trips,
       currentTrip: get().currentTrip?.id === id ? null : get().currentTrip,
     });
+    return { ok: true };
   },
 
   duplicateTrip: async (id) => {
     const original = get().trips.find(t => t.id === id);
-    if (!original) return;
+    if (!original) return { ok: false };
 
     const remap = (arr) => (arr || []).map(item => ({
       ...item,
@@ -101,69 +261,71 @@ const useTripStore = create((set, get) => ({
       checklist: remap(original.checklist),
     };
 
-    await get()._persist(storage.saveTrip(copy));
+    const r = await get()._persist(storage.saveTrip(copy), { operation: 'duplicateTrip' });
+    return r.ok ? { ok: true } : { ok: false };
   },
 
   archiveTrip: async (id) => {
     const trip = get().trips.find(t => t.id === id);
-    if (!trip) return;
+    if (!trip) return { ok: false };
     const updated = { ...trip, archived: !trip.archived, updatedAt: new Date().toISOString() };
-    await get()._persist(storage.saveTrip(updated));
+    const r = await get()._persist(storage.saveTrip(updated), { operation: 'archiveTrip' });
+    return r.ok ? { ok: true } : { ok: false };
   },
 
   // ── Itinerary ─────────────────────────────────────────────────────────────
   addActivity: async (tripId, dayId, activity) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
+    if (!trip) return { ok: false };
     const newActivity = { ...activity, id: generateId() };
     const itinerary = trip.itinerary.map(day =>
       day.id === dayId
         ? { ...day, activities: [...day.activities, { ...newActivity, order: day.activities.length }] }
         : day
     );
-    await get().updateTrip(tripId, { itinerary });
+    return get().updateTrip(tripId, { itinerary }, { operation: 'activity' });
   },
 
   updateActivity: async (tripId, dayId, activityId, updates) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
+    if (!trip) return { ok: false };
     const itinerary = trip.itinerary.map(day =>
       day.id === dayId
         ? { ...day, activities: day.activities.map(a => a.id === activityId ? { ...a, ...updates } : a) }
         : day
     );
-    await get().updateTrip(tripId, { itinerary });
+    return get().updateTrip(tripId, { itinerary }, { operation: 'activity' });
   },
 
   deleteActivity: async (tripId, dayId, activityId) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
+    if (!trip) return { ok: false };
     const itinerary = trip.itinerary.map(day =>
       day.id === dayId
         ? { ...day, activities: day.activities.filter(a => a.id !== activityId) }
         : day
     );
-    await get().updateTrip(tripId, { itinerary });
+    return get().updateTrip(tripId, { itinerary }, { operation: 'activity' });
   },
 
   toggleActivityComplete: async (tripId, dayId, activityId) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
+    if (!trip) return { ok: false };
     const itinerary = trip.itinerary.map(day =>
       day.id === dayId
         ? { ...day, activities: day.activities.map(a => a.id === activityId ? { ...a, completed: !a.completed } : a) }
         : day
     );
-    await get().updateTrip(tripId, { itinerary });
+    return get().updateTrip(tripId, { itinerary }, { operation: 'activity' });
   },
 
   duplicateActivity: async (tripId, dayId, activityId) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
+    if (!trip) return { ok: false };
     const day = trip.itinerary.find(d => d.id === dayId);
-    if (!day) return;
+    if (!day) return { ok: false };
     const original = day.activities.find(a => a.id === activityId);
-    if (!original) return;
+    if (!original) return { ok: false };
     const clone = {
       ...original,
       id: generateId(),
@@ -173,16 +335,16 @@ const useTripStore = create((set, get) => ({
     const itinerary = trip.itinerary.map(d =>
       d.id === dayId ? { ...d, activities: [...d.activities, clone] } : d
     );
-    await get().updateTrip(tripId, { itinerary });
+    return get().updateTrip(tripId, { itinerary }, { operation: 'activity' });
   },
 
   duplicateDay: async (tripId, dayId, targetDate) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
+    if (!trip) return { ok: false };
     const source = trip.itinerary.find(d => d.id === dayId);
-    if (!source) return;
+    if (!source) return { ok: false };
     const targetDay = trip.itinerary.find(d => d.date === targetDate);
-    if (!targetDay) return;
+    if (!targetDay) return { ok: false };
     const cloned = (source.activities || []).map((a, i) => ({
       ...a,
       id: generateId(),
@@ -192,97 +354,183 @@ const useTripStore = create((set, get) => ({
     const itinerary = trip.itinerary.map(d =>
       d.id === targetDay.id ? { ...d, activities: [...(d.activities || []), ...cloned] } : d
     );
-    await get().updateTrip(tripId, { itinerary });
+    return get().updateTrip(tripId, { itinerary }, { operation: 'day' });
   },
 
   reorderActivities: async (tripId, dayId, reorderedActivities) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
+    if (!trip) return { ok: false };
     const itinerary = trip.itinerary.map(day =>
       day.id === dayId
         ? { ...day, activities: reorderedActivities.map((a, i) => ({ ...a, order: i })) }
         : day
     );
-    await get().updateTrip(tripId, { itinerary });
+    return get().updateTrip(tripId, { itinerary }, { operation: 'activity' });
   },
 
   setItinerary: async (tripId, itinerary) => {
-    await get().updateTrip(tripId, { itinerary });
+    return get().updateTrip(tripId, { itinerary }, { operation: 'itinerary' });
+  },
+
+  /**
+   * Añade un día ANTES del primer día del viaje. Extiende `startDate` -1.
+   * Atómico: actualiza startDate, mete el nuevo día y renumera.
+   */
+  addDayBefore: async (tripId) => {
+    const trip = get().trips.find(t => t.id === tripId);
+    if (!trip) return { ok: false };
+    const bounds = getItineraryBounds(trip.itinerary);
+    const startRef = bounds.start || trip.startDate;
+    if (!startRef) return { ok: false };
+    const newStart = addDaysISO(startRef, -1);
+    const end = trip.endDate || bounds.end || newStart;
+    // Forzamos la sincronización pasando itinerary explícito (no perdemos nada)
+    const { days } = syncDaysWithDates(trip.itinerary || [], newStart, end);
+    return get().updateTrip(
+      tripId,
+      { startDate: newStart, endDate: end, itinerary: days },
+      { operation: 'addDayBefore' },
+    );
+  },
+
+  /**
+   * Añade un día DESPUÉS del último día del viaje. Extiende `endDate` +1.
+   */
+  addDayAfter: async (tripId) => {
+    const trip = get().trips.find(t => t.id === tripId);
+    if (!trip) return { ok: false };
+    const bounds = getItineraryBounds(trip.itinerary);
+    const endRef = bounds.end || trip.endDate;
+    if (!endRef) return { ok: false };
+    const newEnd = addDaysISO(endRef, 1);
+    const start = trip.startDate || bounds.start || newEnd;
+    const { days } = syncDaysWithDates(trip.itinerary || [], start, newEnd);
+    return get().updateTrip(
+      tripId,
+      { startDate: start, endDate: newEnd, itinerary: days },
+      { operation: 'addDayAfter' },
+    );
+  },
+
+  /**
+   * Elimina un día del itinerario. Si era el primero o el último, ajusta
+   * startDate/endDate al nuevo extremo. Si era intermedio, deja un "hueco":
+   * el itinerario se reconstruye desde el rango actual para que no falten
+   * fechas, pero el día concreto pierde sus actividades (por eso pedimos
+   * confirmación en la UI antes de llegar aquí).
+   */
+  removeDay: async (tripId, dayId) => {
+    const trip = get().trips.find(t => t.id === tripId);
+    if (!trip) return { ok: false };
+    const itin = trip.itinerary || [];
+    const target = itin.find(d => d.id === dayId);
+    if (!target) return { ok: false };
+
+    const remaining = itin.filter(d => d.id !== dayId);
+    if (remaining.length === 0) {
+      return get().updateTrip(
+        tripId,
+        { itinerary: [], startDate: '', endDate: '' },
+        { operation: 'removeDay' },
+      );
+    }
+
+    const bounds = getItineraryBounds(remaining);
+    const isExtreme = target.date === bounds.start || target.date === bounds.end ||
+                      target.date < bounds.start || target.date > bounds.end;
+
+    if (isExtreme) {
+      // Recortar el rango al nuevo extremo
+      return get().updateTrip(
+        tripId,
+        {
+          itinerary: normalizeItinerary(remaining),
+          startDate: bounds.start,
+          endDate: bounds.end,
+        },
+        { operation: 'removeDay' },
+      );
+    } else {
+      // Día intermedio: re-sincronizamos para que el rango actual del viaje
+      // siga teniendo todos sus días (creando uno vacío en el hueco).
+      const { days } = syncDaysWithDates(remaining, trip.startDate, trip.endDate);
+      return get().updateTrip(tripId, { itinerary: days }, { operation: 'removeDay' });
+    }
   },
 
   // ── Accommodations ────────────────────────────────────────────────────────
   addAccommodation: async (tripId, accom) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       accommodations: [...trip.accommodations, { ...accom, id: generateId() }],
-    });
+    }, { operation: 'accommodation' });
   },
 
   updateAccommodation: async (tripId, accomId, updates) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       accommodations: trip.accommodations.map(a => a.id === accomId ? { ...a, ...updates } : a),
-    });
+    }, { operation: 'accommodation' });
   },
 
   deleteAccommodation: async (tripId, accomId) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       accommodations: trip.accommodations.filter(a => a.id !== accomId),
-    });
+    }, { operation: 'accommodation' });
   },
 
   // ── Transports ────────────────────────────────────────────────────────────
   addTransport: async (tripId, transport) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       transports: [...trip.transports, { ...transport, id: generateId() }],
-    });
+    }, { operation: 'transport' });
   },
 
   updateTransport: async (tripId, transportId, updates) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       transports: trip.transports.map(t => t.id === transportId ? { ...t, ...updates } : t),
-    });
+    }, { operation: 'transport' });
   },
 
   deleteTransport: async (tripId, transportId) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       transports: trip.transports.filter(t => t.id !== transportId),
-    });
+    }, { operation: 'transport' });
   },
 
   // ── Places ────────────────────────────────────────────────────────────────
   addPlace: async (tripId, place) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       places: [...trip.places, { ...place, id: generateId() }],
-    });
+    }, { operation: 'place' });
   },
 
   updatePlace: async (tripId, placeId, updates) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       places: trip.places.map(p => p.id === placeId ? { ...p, ...updates } : p),
-    });
+    }, { operation: 'place' });
   },
 
   deletePlace: async (tripId, placeId) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       places: trip.places.filter(p => p.id !== placeId),
-    });
+    }, { operation: 'place' });
   },
 
   // ── Participants (gastos compartidos) ────────────────────────────────────
@@ -290,7 +538,7 @@ const useTripStore = create((set, get) => ({
   // define manualmente. Persistidos como trip.participants en el JSONB.
   addParticipant: async (tripId, name, color) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
+    if (!trip) return { ok: false };
     const participants = trip.participants || [];
     const newP = {
       id: generateId(),
@@ -298,23 +546,28 @@ const useTripStore = create((set, get) => ({
       color: color || '#6366F1',
       createdAt: new Date().toISOString(),
     };
-    await get().updateTrip(tripId, { participants: [...participants, newP] });
-    return newP;
+    const r = await get().updateTrip(
+      tripId,
+      { participants: [...participants, newP] },
+      { operation: 'participant' },
+    );
+    if (!r?.ok) return { ok: false };
+    return { ok: true, participant: newP };
   },
 
   updateParticipant: async (tripId, participantId, updates) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       participants: (trip.participants || []).map(p =>
         p.id === participantId ? { ...p, ...updates } : p,
       ),
-    });
+    }, { operation: 'participant' });
   },
 
   deleteParticipant: async (tripId, participantId) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
+    if (!trip) return { ok: false };
     // Quitarlo de participants y limpiar referencias en expenses
     const participants = (trip.participants || []).filter(p => p.id !== participantId);
     const expenses = (trip.expenses || []).map(e => {
@@ -330,91 +583,91 @@ const useTripStore = create((set, get) => ({
       }
       return next;
     });
-    await get().updateTrip(tripId, { participants, expenses });
+    return get().updateTrip(tripId, { participants, expenses }, { operation: 'participant' });
   },
 
   // ── Expenses ─────────────────────────────────────────────────────────────
   addExpense: async (tripId, expense) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       expenses: [...trip.expenses, { ...expense, id: generateId() }],
-    });
+    }, { operation: 'expense' });
   },
 
   updateExpense: async (tripId, expenseId, updates) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       expenses: trip.expenses.map(e => e.id === expenseId ? { ...e, ...updates } : e),
-    });
+    }, { operation: 'expense' });
   },
 
   deleteExpense: async (tripId, expenseId) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       expenses: trip.expenses.filter(e => e.id !== expenseId),
-    });
+    }, { operation: 'expense' });
   },
 
   // ── Checklist ────────────────────────────────────────────────────────────
   addChecklistItem: async (tripId, text, category = 'otros') => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       checklist: [...trip.checklist, { id: generateId(), text, category, checked: false }],
-    });
+    }, { operation: 'checklist' });
   },
 
   addChecklistItems: async (tripId, items) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
+    if (!trip) return { ok: false };
     const newItems = items.map(item => ({ id: generateId(), checked: false, ...item }));
-    await get().updateTrip(tripId, {
+    return get().updateTrip(tripId, {
       checklist: [...trip.checklist, ...newItems],
-    });
+    }, { operation: 'checklist' });
   },
 
   toggleChecklistItem: async (tripId, itemId) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       checklist: trip.checklist.map(c => c.id === itemId ? { ...c, checked: !c.checked } : c),
-    });
+    }, { operation: 'checklist' });
   },
 
   updateChecklistItem: async (tripId, itemId, updates) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       checklist: trip.checklist.map(c => c.id === itemId ? { ...c, ...updates } : c),
-    });
+    }, { operation: 'checklist' });
   },
 
   deleteChecklistItem: async (tripId, itemId) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       checklist: trip.checklist.filter(c => c.id !== itemId),
-    });
+    }, { operation: 'checklist' });
   },
 
   deleteCompletedChecklistItems: async (tripId) => {
     const trip = get().trips.find(t => t.id === tripId);
-    if (!trip) return;
-    await get().updateTrip(tripId, {
+    if (!trip) return { ok: false };
+    return get().updateTrip(tripId, {
       checklist: trip.checklist.filter(c => !c.checked),
-    });
+    }, { operation: 'checklist' });
   },
 
   clearChecklist: async (tripId) => {
-    await get().updateTrip(tripId, { checklist: [] });
+    return get().updateTrip(tripId, { checklist: [] }, { operation: 'checklist' });
   },
 
   // ── Budget Estimation ─────────────────────────────────────────────────────
   saveBudgetEstimation: async (tripId, estimation) => {
-    await get().updateTrip(tripId, { budgetEstimation: estimation });
+    return get().updateTrip(tripId, { budgetEstimation: estimation }, { operation: 'budgetEstimation' });
   },
 
   // ── Filters ──────────────────────────────────────────────────────────────
@@ -434,16 +687,14 @@ const useTripStore = create((set, get) => ({
     if (!trip) return null;
     return {
       version: '1.0',
-      exportedAt: new Date().toISOString(),
       app: 'TravelMind',
       trips: [trip],
     };
   },
 
   importData: async (jsonData) => {
-    const trips = await storage.importData(jsonData);
-    set({ trips });
-    return trips;
+    const r = await get()._persist(storage.importData(jsonData), { operation: 'importData' });
+    return r.ok ? r.trips : null;
   },
 
   // ── Computed ─────────────────────────────────────────────────────────────

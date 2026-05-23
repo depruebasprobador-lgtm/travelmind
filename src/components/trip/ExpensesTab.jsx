@@ -11,7 +11,7 @@ import {
 import useTripStore from '../../data/store';
 import Modal from '../Modal';
 import EmptyState from '../EmptyState';
-import { formatCurrency, formatDate, getDaysBetween } from '../../utils/helpers';
+import { formatCurrency, formatDate, getDaysBetween, formatDateShort, addDaysISO, compareISODates } from '../../utils/helpers';
 import { computeBalances, simplifyByCurrency, computeShares } from '../../utils/settlement';
 
 // ── Category config ───────────────────────────────────────────────────────────
@@ -205,17 +205,18 @@ function ChartsSection({ expenses, trip }) {
       if (!e.date) {
         map['Sin fecha'] = (map['Sin fecha'] || 0) + (e.amount || 0);
       } else {
-        const label = new Date(e.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+        const label = formatDateShort(e.date);
         map[label] = (map[label] || 0) + (e.amount || 0);
       }
     });
     const result = [];
     if (trip.startDate && trip.endDate) {
-      const start = new Date(trip.startDate);
-      const end = new Date(trip.endDate);
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const label = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+      let cursor = String(trip.startDate).slice(0, 10);
+      const last = String(trip.endDate).slice(0, 10);
+      for (let safety = 0; safety < 3650 && compareISODates(cursor, last) <= 0; safety++) {
+        const label = formatDateShort(cursor);
         result.push({ name: label, gastado: map[label] || 0 });
+        cursor = addDaysISO(cursor, 1);
       }
     }
     if (map['Sin fecha']) result.push({ name: 'Sin fecha', gastado: map['Sin fecha'] });
@@ -526,8 +527,12 @@ export default function ExpensesTab({ trip }) {
     currency: 'EUR', paidBy: '', splitBetween: [],
   });
   const [sortBy, setSortBy] = useState('date-desc');
+  const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { addExpense, updateExpense, deleteExpense } = useTripStore();
+  const saveStatus = useTripStore(s => s.saveStatus);
+  const isSaving = saveStatus === 'saving';
 
   const participants = trip.participants || [];
   const partMap = useMemo(
@@ -542,6 +547,7 @@ export default function ExpensesTab({ trip }) {
     });
     setEditing(null);
     setShowForm(false);
+    setFormError('');
   };
 
   const startEdit = (expense) => {
@@ -568,8 +574,25 @@ export default function ExpensesTab({ trip }) {
     setShowForm(true);
   };
 
-  const handleSave = () => {
-    if (!form.description.trim() || !form.amount) return;
+  const validate = () => {
+    if (!form.description.trim()) return 'La descripción es obligatoria.';
+    const amt = Number(form.amount);
+    if (!form.amount || Number.isNaN(amt) || amt <= 0) {
+      return 'El importe debe ser mayor que 0.';
+    }
+    // Si hay participantes y el gasto es compartido, splitBetween no puede estar vacío
+    if (participants.length > 0 && form.splitBetween.length === 0) {
+      return 'Selecciona al menos un participante con quien dividir el gasto.';
+    }
+    return '';
+  };
+
+  const handleSave = async () => {
+    if (isSubmitting) return;
+    const v = validate();
+    if (v) { setFormError(v); return; }
+    setFormError('');
+    setIsSubmitting(true);
     const data = {
       ...form,
       amount: Number(form.amount),
@@ -577,8 +600,11 @@ export default function ExpensesTab({ trip }) {
       splitBetween: form.splitBetween,
       splitMode: 'equal',
     };
-    if (editing) updateExpense(trip.id, editing.id, data);
-    else addExpense(trip.id, data);
+    const r = editing
+      ? await updateExpense(trip.id, editing.id, data)
+      : await addExpense(trip.id, data);
+    setIsSubmitting(false);
+    if (!r?.ok) return;
     resetForm();
   };
 
@@ -596,7 +622,7 @@ export default function ExpensesTab({ trip }) {
 
   const sortedExpenses = useMemo(() => {
     const copy = [...expenses];
-    if (sortBy === 'date-desc') return copy.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    if (sortBy === 'date-desc') return copy.sort((a, b) => compareISODates(b.date, a.date));
     if (sortBy === 'amount-desc') return copy.sort((a, b) => (b.amount || 0) - (a.amount || 0));
     if (sortBy === 'category') return copy.sort((a, b) => (a.category || '').localeCompare(b.category || ''));
     return copy;

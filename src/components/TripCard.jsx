@@ -10,24 +10,30 @@ export default function TripCard({ trip }) {
   const toast = useToast();
   const duplicateTrip = useTripStore(s => s.duplicateTrip);
   const deleteTrip = useTripStore(s => s.deleteTrip);
+  const saveStatus = useTripStore(s => s.saveStatus);
+  const isSaving = saveStatus === 'saving';
 
   const handleEdit = (e) => {
     e.stopPropagation();
+    if (isSaving) return;
     navigate(`/trip/${trip.id}/edit`);
   };
 
-  const handleDuplicate = (e) => {
+  const handleDuplicate = async (e) => {
     e.stopPropagation();
-    duplicateTrip(trip.id);
+    if (isSaving) return;
+    const r = await duplicateTrip(trip.id);
+    if (!r?.ok) return; // el bridge muestra el toast de error
     toast('Viaje duplicado', 'success');
   };
 
-  const handleDelete = (e) => {
+  const handleDelete = async (e) => {
     e.stopPropagation();
-    if (window.confirm(`¿Eliminar "${trip.destination}"? Esta acción no se puede deshacer.`)) {
-      deleteTrip(trip.id);
-      toast('Viaje eliminado', 'info');
-    }
+    if (isSaving) return;
+    if (!window.confirm(`¿Eliminar "${trip.destination}"? Esta acción no se puede deshacer.`)) return;
+    const r = await deleteTrip(trip.id);
+    if (!r?.ok) return;
+    toast('Viaje eliminado', 'info');
   };
 
   // Checklist progress
@@ -76,13 +82,13 @@ export default function TripCard({ trip }) {
 
         {/* Quick action row — visible on card hover */}
         <div className="trip-card-quick-actions">
-          <button className="trip-card-action-btn" onClick={handleEdit} title="Editar">
+          <button className="trip-card-action-btn" onClick={handleEdit} disabled={isSaving} title="Editar">
             <Edit3 size={14} /> Editar
           </button>
-          <button className="trip-card-action-btn" onClick={handleDuplicate} title="Duplicar">
+          <button className="trip-card-action-btn" onClick={handleDuplicate} disabled={isSaving} title="Duplicar">
             <Copy size={14} /> Duplicar
           </button>
-          <button className="trip-card-action-btn danger" onClick={handleDelete} title="Eliminar">
+          <button className="trip-card-action-btn danger" onClick={handleDelete} disabled={isSaving} title="Eliminar">
             <Trash2 size={14} /> Eliminar
           </button>
         </div>

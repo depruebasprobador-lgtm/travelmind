@@ -4,32 +4,70 @@ import useTripStore from '../../data/store';
 import Modal from '../Modal';
 import PlaceSearch from '../PlaceSearch';
 import EmptyState from '../EmptyState';
-import { formatDate, formatCurrency } from '../../utils/helpers';
+import ConfirmDialog from '../ConfirmDialog';
+import { formatDate, formatCurrency, compareISODates } from '../../utils/helpers';
+
+const EMPTY = { name: '', address: '', price: '', bookingLink: '', checkIn: '', checkOut: '', notes: '', lat: null, lng: null };
 
 export default function AccommodationTab({ trip }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: '', address: '', price: '', bookingLink: '', checkIn: '', checkOut: '', notes: '', lat: null, lng: null });
+  const [form, setForm] = useState(EMPTY);
+  const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null); // accom
 
   const { addAccommodation, updateAccommodation, deleteAccommodation } = useTripStore();
+  const saveStatus = useTripStore(s => s.saveStatus);
+  const isSaving = saveStatus === 'saving';
 
   const resetForm = () => {
-    setForm({ name: '', address: '', price: '', bookingLink: '', checkIn: '', checkOut: '', notes: '', lat: null, lng: null });
+    setForm(EMPTY);
     setEditing(null);
     setShowForm(false);
+    setFormError('');
   };
 
   const startEdit = (accom) => {
     setEditing(accom);
-    setForm({ name: accom.name, address: accom.address || '', price: accom.price || '', bookingLink: accom.bookingLink || '', checkIn: accom.checkIn || '', checkOut: accom.checkOut || '', notes: accom.notes || '', lat: accom.lat, lng: accom.lng });
+    setForm({
+      name: accom.name,
+      address: accom.address || '',
+      price: accom.price || '',
+      bookingLink: accom.bookingLink || '',
+      checkIn: accom.checkIn || '',
+      checkOut: accom.checkOut || '',
+      notes: accom.notes || '',
+      lat: accom.lat,
+      lng: accom.lng,
+    });
+    setFormError('');
     setShowForm(true);
   };
 
-  const handleSave = () => {
-    if (!form.name.trim()) return;
+  const validate = () => {
+    if (!form.name.trim()) return 'El nombre es obligatorio.';
+    if (form.checkIn && form.checkOut && compareISODates(form.checkOut, form.checkIn) < 0) {
+      return 'El check-out no puede ser anterior al check-in.';
+    }
+    if (form.price !== '' && Number(form.price) < 0) {
+      return 'El precio no puede ser negativo.';
+    }
+    return '';
+  };
+
+  const handleSave = async () => {
+    if (isSubmitting) return;
+    const v = validate();
+    if (v) { setFormError(v); return; }
+    setFormError('');
+    setIsSubmitting(true);
     const data = { ...form, price: Number(form.price) || 0 };
-    if (editing) updateAccommodation(trip.id, editing.id, data);
-    else addAccommodation(trip.id, data);
+    const r = editing
+      ? await updateAccommodation(trip.id, editing.id, data)
+      : await addAccommodation(trip.id, data);
+    setIsSubmitting(false);
+    if (!r?.ok) return; // mantenemos el form abierto con los datos
     resetForm();
   };
 
@@ -37,13 +75,40 @@ export default function AccommodationTab({ trip }) {
     setForm(prev => ({ ...prev, address: place.displayName, lat: place.lat, lng: place.lng }));
   };
 
-  const accoms = trip.accommodations || [];
+  const handleDeleteRequest = (a) => setConfirmDelete(a);
+  const handleDeleteConfirm = async () => {
+    if (!confirmDelete) return;
+    const r = await deleteAccommodation(trip.id, confirmDelete.id);
+    setConfirmDelete(null);
+    return r;
+  };
+
+  // Orden cronológico por checkIn (los sin fecha al final)
+  const accoms = [...(trip.accommodations || [])].sort((a, b) => {
+    if (!a.checkIn && !b.checkIn) return 0;
+    if (!a.checkIn) return 1;
+    if (!b.checkIn) return -1;
+    return compareISODates(a.checkIn, b.checkIn);
+  });
 
   return (
     <div>
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Eliminar alojamiento"
+          message={`¿Eliminar "${confirmDelete.name}"? Esta acción no se puede deshacer.`}
+          danger
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={handleDeleteConfirm}
+        />
+      )}
+
       <div className="section-header">
         <h3>Alojamientos ({accoms.length})</h3>
-        <button className="btn btn-primary btn-sm" onClick={() => { resetForm(); setShowForm(true); }}>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => { resetForm(); setShowForm(true); }}
+          disabled={isSaving}>
           <Plus size={14} /> Añadir
         </button>
       </div>
@@ -63,8 +128,8 @@ export default function AccommodationTab({ trip }) {
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
               {a.bookingLink && <a href={a.bookingLink} target="_blank" rel="noopener" className="btn btn-icon btn-sm"><ExternalLink size={14} /></a>}
-              <button className="btn btn-icon btn-sm" onClick={() => startEdit(a)}><Edit3 size={14} /></button>
-              <button className="btn btn-icon btn-sm" style={{ color: 'var(--error)' }} onClick={() => deleteAccommodation(trip.id, a.id)}><Trash2 size={14} /></button>
+              <button className="btn btn-icon btn-sm" onClick={() => startEdit(a)} disabled={isSaving}><Edit3 size={14} /></button>
+              <button className="btn btn-icon btn-sm" style={{ color: 'var(--error)' }} onClick={() => handleDeleteRequest(a)} disabled={isSaving}><Trash2 size={14} /></button>
             </div>
           </div>
         </div>
@@ -73,9 +138,23 @@ export default function AccommodationTab({ trip }) {
       )}
 
       {showForm && (
-        <Modal title={editing ? 'Editar alojamiento' : 'Nuevo alojamiento'} onClose={resetForm}
-          footer={<><button className="btn btn-secondary" onClick={resetForm}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSave}>{editing ? 'Guardar' : 'Añadir'}</button></>}>
+        <Modal
+          title={editing ? 'Editar alojamiento' : 'Nuevo alojamiento'}
+          onClose={isSubmitting ? () => {} : resetForm}
+          footer={<>
+            <button className="btn btn-secondary" onClick={resetForm} disabled={isSubmitting}>Cancelar</button>
+            <button
+              className="btn btn-primary"
+              onClick={handleSave}
+              disabled={isSubmitting || !form.name.trim()}>
+              {isSubmitting ? 'Guardando...' : (editing ? 'Guardar' : 'Añadir')}
+            </button>
+          </>}>
+          {formError && (
+            <div style={{ background: 'rgba(239,68,68,0.10)', color: 'var(--error)', padding: '8px 12px', borderRadius: 8, fontSize: '0.85rem', marginBottom: 12 }}>
+              {formError}
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">Nombre</label>
             <input className="form-input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ej: Hotel Artemide" />
@@ -91,7 +170,7 @@ export default function AccommodationTab({ trip }) {
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Precio (€)</label>
-              <input className="form-input" type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
+              <input className="form-input" type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
             </div>
             <div className="form-group">
               <label className="form-label">Link de reserva</label>
@@ -105,7 +184,7 @@ export default function AccommodationTab({ trip }) {
             </div>
             <div className="form-group">
               <label className="form-label">Check-out</label>
-              <input className="form-input" type="date" value={form.checkOut} onChange={e => setForm({ ...form, checkOut: e.target.value })} />
+              <input className="form-input" type="date" value={form.checkOut} min={form.checkIn || undefined} onChange={e => setForm({ ...form, checkOut: e.target.value })} />
             </div>
           </div>
           <div className="form-group">

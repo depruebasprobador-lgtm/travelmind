@@ -6,6 +6,7 @@ import {
 import useTripStore from '../../data/store';
 import Modal from '../Modal';
 import EmptyState from '../EmptyState';
+import ConfirmDialog from '../ConfirmDialog';
 import { TRANSPORT_TYPES } from '../../utils/constants';
 import { formatCurrency } from '../../utils/helpers';
 import { calcularMargenLogistico } from '../../utils/connection';
@@ -274,10 +275,15 @@ export default function TransportTab({ trip }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const { addTransport, updateTransport, deleteTransport } = useTripStore();
+  const saveStatus = useTripStore(s => s.saveStatus);
+  const isSaving = saveStatus === 'saving';
 
-  const resetForm = () => { setForm(EMPTY_FORM); setEditing(null); setShowForm(false); };
+  const resetForm = () => { setForm(EMPTY_FORM); setEditing(null); setShowForm(false); setFormError(''); };
 
   const startEdit = (t) => {
     setEditing(t);
@@ -297,8 +303,33 @@ export default function TransportTab({ trip }) {
     setShowForm(true);
   };
 
-  const handleSave = () => {
-    if (!form.company.trim()) return;
+  const validate = () => {
+    if (!form.company.trim()) return 'El nombre/compañía es obligatorio.';
+    if (form.departureDateTime && form.arrivalDateTime &&
+        form.arrivalDateTime < form.departureDateTime) {
+      return 'La llegada no puede ser anterior a la salida.';
+    }
+    // Cronología de las escalas: cada escala debe estar entre salida y llegada,
+    // y dentro de cada escala la salida >= llegada.
+    for (let i = 0; i < (form.stopovers || []).length; i++) {
+      const s = form.stopovers[i];
+      if (s.arrivalDateTime && s.departureDateTime &&
+          s.departureDateTime < s.arrivalDateTime) {
+        return `Escala ${i + 1}: la salida no puede ser anterior a la llegada.`;
+      }
+    }
+    if (form.price !== '' && Number(form.price) < 0) {
+      return 'El precio no puede ser negativo.';
+    }
+    return '';
+  };
+
+  const handleSave = async () => {
+    if (isSubmitting) return;
+    const v = validate();
+    if (v) { setFormError(v); return; }
+    setFormError('');
+    setIsSubmitting(true);
     const data = {
       ...form,
       price: Number(form.price) || 0,
@@ -306,9 +337,18 @@ export default function TransportTab({ trip }) {
       dateTime: form.departureDateTime || form.dateTime || '',
       stopovers: form.stopovers || [],
     };
-    if (editing) updateTransport(trip.id, editing.id, data);
-    else addTransport(trip.id, data);
+    const r = editing
+      ? await updateTransport(trip.id, editing.id, data)
+      : await addTransport(trip.id, data);
+    setIsSubmitting(false);
+    if (!r?.ok) return;
     resetForm();
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!confirmDelete) return;
+    await deleteTransport(trip.id, confirmDelete.id);
+    setConfirmDelete(null);
   };
 
   const updateStop = (idx, next) => {
@@ -325,13 +365,33 @@ export default function TransportTab({ trip }) {
     setForm(f => ({ ...f, stopovers: [...(f.stopovers || []), newStopover()] }));
   };
 
-  const transports = trip.transports || [];
+  const transports = [...(trip.transports || [])].sort((a, b) => {
+    const ad = a.departureDateTime || a.dateTime || '';
+    const bd = b.departureDateTime || b.dateTime || '';
+    if (!ad && !bd) return 0;
+    if (!ad) return 1;
+    if (!bd) return -1;
+    return ad < bd ? -1 : ad > bd ? 1 : 0;
+  });
 
   return (
     <div>
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Eliminar transporte"
+          message={`¿Eliminar "${confirmDelete.company || confirmDelete.type}"? Esta acción no se puede deshacer.`}
+          danger
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={handleDeleteConfirm}
+        />
+      )}
+
       <div className="section-header">
         <h3>Transportes ({transports.length})</h3>
-        <button className="btn btn-primary btn-sm" onClick={() => { resetForm(); setShowForm(true); }}>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => { resetForm(); setShowForm(true); }}
+          disabled={isSaving}>
           <Plus size={14} /> Añadir
         </button>
       </div>
@@ -342,7 +402,7 @@ export default function TransportTab({ trip }) {
             key={t.id}
             transport={t}
             onEdit={() => startEdit(t)}
-            onDelete={() => deleteTransport(trip.id, t.id)}
+            onDelete={() => setConfirmDelete(t)}
           />
         ))
       ) : (
@@ -352,16 +412,24 @@ export default function TransportTab({ trip }) {
       {showForm && (
         <Modal
           title={editing ? 'Editar transporte' : 'Nuevo transporte'}
-          onClose={resetForm}
+          onClose={isSubmitting ? () => {} : resetForm}
           footer={
             <>
-              <button className="btn btn-secondary" onClick={resetForm}>Cancelar</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={!form.company.trim()}>
-                {editing ? 'Guardar' : 'Añadir'}
+              <button className="btn btn-secondary" onClick={resetForm} disabled={isSubmitting}>Cancelar</button>
+              <button
+                className="btn btn-primary"
+                onClick={handleSave}
+                disabled={isSubmitting || !form.company.trim()}>
+                {isSubmitting ? 'Guardando...' : (editing ? 'Guardar' : 'Añadir')}
               </button>
             </>
           }
         >
+          {formError && (
+            <div style={{ background: 'rgba(239,68,68,0.10)', color: 'var(--error)', padding: '8px 12px', borderRadius: 8, fontSize: '0.85rem', marginBottom: 12 }}>
+              {formError}
+            </div>
+          )}
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Tipo</label>
@@ -447,6 +515,7 @@ export default function TransportTab({ trip }) {
                 onChange={e => setForm({ ...form, price: e.target.value })} />
             </div>
           </div>
+
 
           <div className="form-group">
             <label className="form-label">Notas</label>

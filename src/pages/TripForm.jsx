@@ -3,13 +3,18 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Save, ArrowLeft, AlertCircle } from 'lucide-react';
 import useTripStore from '../data/store';
 import PlaceSearch from '../components/PlaceSearch';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { useToast } from '../components/Toast';
 import { TRIP_STATUS } from '../utils/constants';
+import { formatDate, compareISODates } from '../utils/helpers';
 
 export default function TripForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const addTrip = useTripStore(s => s.addTrip);
   const updateTrip = useTripStore(s => s.updateTrip);
+  const previewDateChange = useTripStore(s => s.previewDateChange);
   const loadTrips = useTripStore(s => s.loadTrips);
   const trips = useTripStore(s => s.trips);
 
@@ -19,6 +24,7 @@ export default function TripForm() {
   });
   const [dateError, setDateError] = useState('');
   const [loading, setLoading] = useState(!!id);
+  const [confirmDateLoss, setConfirmDateLoss] = useState(null); // { removed }
 
   const isEdit = !!id;
 
@@ -54,7 +60,7 @@ export default function TripForm() {
 
   const handleChange = (e) => {
     const updated = { ...form, [e.target.name]: e.target.value };
-    if (updated.startDate && updated.endDate && updated.endDate < updated.startDate) {
+    if (updated.startDate && updated.endDate && compareISODates(updated.endDate, updated.startDate) < 0) {
       setDateError('La fecha de fin no puede ser anterior a la de inicio.');
     } else {
       setDateError('');
@@ -71,17 +77,40 @@ export default function TripForm() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const persistAndExit = async (force = false) => {
+    const payload = { ...form, budget: Number(form.budget) || 0 };
+    if (isEdit) {
+      const result = await updateTrip(id, payload, { force });
+      if (!result?.ok && result?.removed?.length) {
+        setConfirmDateLoss({ removed: result.removed });
+        return false;
+      }
+      if (!result?.ok) return false; // el bridge ya emitió el toast de error
+      toast('Viaje actualizado', 'success');
+    } else {
+      const created = await addTrip(payload);
+      if (!created) return false; // fallo de persistencia → toast vía bridge
+      toast('Viaje creado', 'success');
+    }
+    navigate('/');
+    return true;
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.destination) return;
     if (dateError) return;
 
-    if (isEdit) {
-      updateTrip(id, { ...form, budget: Number(form.budget) || 0 });
-    } else {
-      addTrip({ ...form, budget: Number(form.budget) || 0 });
+    // En edición, si las fechas cambian y eso dejaría días con actividades
+    // fuera del rango, mostramos confirmación SIN persistir todavía.
+    if (isEdit && form.startDate && form.endDate) {
+      const { removed } = previewDateChange(id, form.startDate, form.endDate);
+      if (removed.length > 0) {
+        setConfirmDateLoss({ removed });
+        return;
+      }
     }
-    navigate('/');
+    await persistAndExit(false);
   };
 
   if (loading) {
@@ -96,6 +125,23 @@ export default function TripForm() {
 
   return (
     <div className="page-container" style={{ maxWidth: 700, margin: '0 auto' }}>
+      {confirmDateLoss && (
+        <ConfirmDialog
+          title={`Vas a perder ${confirmDateLoss.removed.length} día(s) con actividades`}
+          message={
+            `Las nuevas fechas dejan fuera estos días y se borrarán junto a sus actividades:\n\n` +
+            confirmDateLoss.removed.map(d => `• ${formatDate(d.date)} (${d.activities?.length || 0} act.)`).join('\n') +
+            `\n\n¿Confirmas el cambio?`
+          }
+          danger
+          onCancel={() => setConfirmDateLoss(null)}
+          onConfirm={async () => {
+            setConfirmDateLoss(null);
+            await persistAndExit(true);
+          }}
+        />
+      )}
+
       <button className="btn btn-ghost" onClick={() => navigate(-1)} style={{ marginBottom: 16 }}>
         <ArrowLeft size={18} /> Volver
       </button>
@@ -189,7 +235,6 @@ export default function TripForm() {
           </div>
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => navigate(-1)}>Cancelar</button>
             <button type="submit" className="btn btn-primary">
               <Save size={18} /> {isEdit ? 'Guardar cambios' : 'Crear viaje'}
             </button>

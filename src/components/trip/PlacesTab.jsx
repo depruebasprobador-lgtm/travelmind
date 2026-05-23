@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Plus, Trash2, Edit3, ExternalLink, MapPin, CalendarPlus } from 'lucide-react';
 import useTripStore from '../../data/store';
 import Modal from '../Modal';
 import PlaceSearch from '../PlaceSearch';
 import EmptyState from '../EmptyState';
-import { formatDateShort } from '../../utils/helpers';
+import { formatDateShort, normalizeItinerary } from '../../utils/helpers';
 
 // Mapeo etiqueta de Place → tipo de actividad de itinerario
 const PLACE_TAG_TO_ACTIVITY_TYPE = {
@@ -35,14 +35,37 @@ export default function PlacesTab({ trip }) {
   const [activeFilter, setActiveFilter] = useState(null);
 
   const { addPlace, updatePlace, deletePlace, addActivity } = useTripStore();
+  const saveStatus = useTripStore(s => s.saveStatus);
+  const isSaving = saveStatus === 'saving';
   const [addToDayMenu, setAddToDayMenu] = useState(null); // placeId
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
+  const addToDayMenuRef = useRef(null);
 
-  const itinerary = trip.itinerary || [];
+  // Click-outside: cierra el menú "Añadir al día" si el usuario clica fuera.
+  // Compatible con táctil (pointerdown captura tap inicial). No depende de
+  // onMouseLeave, que no funciona en móvil.
+  useEffect(() => {
+    if (!addToDayMenu) return;
+    const onPointerDown = (e) => {
+      if (addToDayMenuRef.current && !addToDayMenuRef.current.contains(e.target)) {
+        setAddToDayMenu(null);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [addToDayMenu]);
 
-  const handleAddToDay = (place, dayId) => {
+  const itinerary = useMemo(
+    () => normalizeItinerary(trip.itinerary || []),
+    [trip.itinerary],
+  );
+
+  const handleAddToDay = async (place, dayId) => {
+    if (isSaving) return;
     const tag = (place.tags || [])[0];
     const type = PLACE_TAG_TO_ACTIVITY_TYPE[tag] || 'visit';
-    addActivity(trip.id, dayId, {
+    const r = await addActivity(trip.id, dayId, {
       name: place.name,
       place: place.address || place.name,
       lat: place.lat || null,
@@ -56,6 +79,7 @@ export default function PlacesTab({ trip }) {
       reservationCode: '',
       fromPlaceId: place.id,
     });
+    if (!r?.ok) return;
     setAddToDayMenu(null);
   };
 
@@ -63,6 +87,7 @@ export default function PlacesTab({ trip }) {
     setForm({ name: '', address: '', description: '', link: '', lat: null, lng: null, tags: [] });
     setEditing(null);
     setShowForm(false);
+    setFormError('');
   };
 
   const startEdit = (place) => {
@@ -76,13 +101,20 @@ export default function PlacesTab({ trip }) {
       lng: place.lng,
       tags: place.tags || [],
     });
+    setFormError('');
     setShowForm(true);
   };
 
-  const handleSave = () => {
-    if (!form.name.trim()) return;
-    if (editing) updatePlace(trip.id, editing.id, form);
-    else addPlace(trip.id, form);
+  const handleSave = async () => {
+    if (isSubmitting) return;
+    if (!form.name.trim()) { setFormError('El nombre es obligatorio.'); return; }
+    setFormError('');
+    setIsSubmitting(true);
+    const r = editing
+      ? await updatePlace(trip.id, editing.id, form)
+      : await addPlace(trip.id, form);
+    setIsSubmitting(false);
+    if (!r?.ok) return;
     resetForm();
   };
 
@@ -205,12 +237,22 @@ export default function PlacesTab({ trip }) {
                       <p style={{ fontSize: '0.85rem', marginTop: 8 }}>{p.description}</p>
                     )}
                   </div>
-                  <div style={{ display: 'flex', gap: 4, marginLeft: 12, position: 'relative' }}>
+                  <div
+                    ref={addToDayMenu === p.id ? addToDayMenuRef : null}
+                    style={{ display: 'flex', gap: 4, marginLeft: 12, position: 'relative' }}
+                  >
                     {itinerary.length > 0 && (
                       <button
                         className="btn btn-icon btn-sm"
                         title="Añadir al itinerario"
-                        onClick={() => setAddToDayMenu(addToDayMenu === p.id ? null : p.id)}
+                        aria-haspopup="menu"
+                        aria-expanded={addToDayMenu === p.id}
+                        onClick={(e) => {
+                          // Detenemos la propagación para que el pointerdown del
+                          // click-outside no nos cierre justo al abrir.
+                          e.stopPropagation();
+                          setAddToDayMenu(addToDayMenu === p.id ? null : p.id);
+                        }}
                         style={{ color: 'var(--primary)' }}>
                         <CalendarPlus size={14} />
                       </button>
@@ -232,7 +274,10 @@ export default function PlacesTab({ trip }) {
 
                     {addToDayMenu === p.id && (
                       <div
-                        onMouseLeave={() => setAddToDayMenu(null)}
+                        role="menu"
+                        // Sin onMouseLeave: cerrar al mover el ratón rompe táctil
+                        // y es accidental en escritorio. El click-outside del
+                        // useEffect se encarga del cierre.
                         style={{
                           position: 'absolute', top: '100%', right: 0, marginTop: 4,
                           background: 'var(--bg-card)', border: '1px solid var(--border-color)',
@@ -245,10 +290,11 @@ export default function PlacesTab({ trip }) {
                         {itinerary.map(d => (
                           <button
                             key={d.id}
+                            role="menuitem"
                             onClick={() => handleAddToDay(p, d.id)}
                             style={{
                               display: 'block', width: '100%', textAlign: 'left',
-                              padding: '8px 10px', background: 'transparent', border: 'none',
+                              padding: '10px 10px', background: 'transparent', border: 'none',
                               cursor: 'pointer', borderRadius: 6, fontSize: '0.85rem',
                             }}
                             onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}
@@ -278,13 +324,23 @@ export default function PlacesTab({ trip }) {
       {showForm && (
         <Modal
           title={editing ? 'Editar lugar' : 'Nuevo lugar'}
-          onClose={resetForm}
+          onClose={isSubmitting ? () => {} : resetForm}
           footer={
             <>
-              <button className="btn btn-secondary" onClick={resetForm}>Cancelar</button>
-              <button className="btn btn-primary" onClick={handleSave}>{editing ? 'Guardar' : 'Añadir'}</button>
+              <button className="btn btn-secondary" onClick={resetForm} disabled={isSubmitting}>Cancelar</button>
+              <button
+                className="btn btn-primary"
+                onClick={handleSave}
+                disabled={isSubmitting || !form.name.trim()}>
+                {isSubmitting ? 'Guardando...' : (editing ? 'Guardar' : 'Añadir')}
+              </button>
             </>
           }>
+          {formError && (
+            <div style={{ background: 'rgba(239,68,68,0.10)', color: 'var(--error)', padding: '8px 12px', borderRadius: 8, fontSize: '0.85rem', marginBottom: 12 }}>
+              {formError}
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">Buscar lugar</label>
             <PlaceSearch onSelect={handlePlaceSelect} placeholder="Busca un lugar de interés..." />

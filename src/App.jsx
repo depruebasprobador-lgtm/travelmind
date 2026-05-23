@@ -8,10 +8,12 @@ import Statistics from './pages/Statistics';
 import FutureDestinations from './pages/FutureDestinations';
 import RecurringTrips from './pages/RecurringTrips';
 import { ToastProvider } from './components/Toast';
+import StoreErrorBridge from './components/StoreErrorBridge';
 
 export default function App() {
   return (
     <ToastProvider>
+      <StoreErrorBridge />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>

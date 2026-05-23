@@ -6,7 +6,9 @@ import TripCard from '../components/TripCard';
 import SearchBar from '../components/SearchBar';
 import DataActions from '../components/DataActions';
 import EmptyState from '../components/EmptyState';
-import { formatCurrency } from '../utils/helpers';
+import TodayTripWidget from '../components/TodayTripWidget';
+import { useToast } from '../components/Toast';
+import { formatCurrency, compareISODates } from '../utils/helpers';
 
 const SORT_OPTIONS = [
   { value: 'recent', label: 'Más recientes' },
@@ -22,7 +24,8 @@ function sortTrips(trips, sort) {
       return arr.sort((a, b) => {
         if (!a.startDate) return 1;
         if (!b.startDate) return -1;
-        return new Date(a.startDate) - new Date(b.startDate);
+        // compareISODates es UTC-safe sobre strings 'YYYY-MM-DD'
+        return compareISODates(a.startDate, b.startDate);
       });
     case 'name_asc':
       return arr.sort((a, b) => (a.destination || '').localeCompare(b.destination || ''));
@@ -36,15 +39,28 @@ function sortTrips(trips, sort) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const toast = useToast();
   const loadTrips = useTripStore(s => s.loadTrips);
   const trips = useTripStore(s => s.trips);
   const getFilteredTrips = useTripStore(s => s.getFilteredTrips);
   const archiveTrip = useTripStore(s => s.archiveTrip);
+  const saveStatus = useTripStore(s => s.saveStatus);
+  const isSaving = saveStatus === 'saving';
 
   const [sort, setSort] = useState('recent');
   const [showArchived, setShowArchived] = useState(false);
 
-  useEffect(() => { loadTrips(); }, []);
+  useEffect(() => { loadTrips(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleUnarchive = async (e, tripId) => {
+    e.stopPropagation();
+    if (isSaving) return;
+    const target = trips.find(t => t.id === tripId);
+    const wasArchived = target?.archived;
+    const r = await archiveTrip(tripId);
+    if (!r?.ok) return;
+    toast(wasArchived ? 'Viaje desarchivado' : 'Viaje archivado', 'success');
+  };
 
   const filtered = getFilteredTrips();
   const activeTrips = sortTrips(filtered.filter(t => t.status !== 'idea'), sort);
@@ -63,6 +79,10 @@ export default function Dashboard() {
         <h1>¡Bienvenido a TravelMind! ✈️</h1>
         <p>Planifica, organiza y disfruta tus viajes</p>
       </div>
+
+      {/* Widget destacado: viaje en curso o próximo (≤7 días). Si no hay nada,
+          este componente devuelve null y el Dashboard queda igual que antes. */}
+      <TodayTripWidget />
 
       <div className="stats-grid" style={{ marginBottom: 32 }}>
         <div className="stat-card">
@@ -177,9 +197,11 @@ export default function Dashboard() {
                   <button
                     className="btn btn-sm"
                     style={{ position: 'absolute', bottom: 60, right: 8, zIndex: 10, fontSize: '0.75rem', background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
-                    onClick={e => { e.stopPropagation(); archiveTrip(t.id); }}
+                    onClick={e => handleUnarchive(e, t.id)}
+                    disabled={isSaving}
                     title="Desarchivar"
                   >
+                    Desarchivar
                     Desarchivar
                   </button>
                 </div>
