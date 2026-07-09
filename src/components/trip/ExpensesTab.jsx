@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   Plus, Trash2, Edit3, DollarSign, TrendingUp, TrendingDown,
   AlertTriangle, Target, Calendar, BarChart2, PieChart as PieChartIcon,
-  ChevronDown, ChevronUp, Wallet, Users, ArrowRight, Check, X,
+  ChevronDown, ChevronUp, Wallet, Users, ArrowRight, Check, X, Calculator,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import useTripStore from '../../data/store';
 import Modal from '../Modal';
+import BudgetCalculator from './BudgetCalculator';
 import EmptyState from '../EmptyState';
 import { formatCurrency, formatDate, getDaysBetween, formatDateShort, addDaysISO, compareISODates } from '../../utils/helpers';
 import { computeBalances, simplifyByCurrency, computeShares } from '../../utils/settlement';
@@ -71,7 +72,7 @@ function PieTooltip({ active, payload }) {
 }
 
 // ── Budget Panel (sin cambios) ────────────────────────────────────────────────
-function BudgetPanel({ trip, totalExpenses }) {
+function BudgetPanel({ trip, totalExpenses, onOpenCalc }) {
   const budget = trip.budget || 0;
   const remaining = budget - totalExpenses;
   const pct = budget > 0 ? Math.min((totalExpenses / budget) * 100, 100) : 0;
@@ -91,6 +92,14 @@ function BudgetPanel({ trip, totalExpenses }) {
 
   return (
     <div className={`expense-budget-panel ${overBudget ? 'over-budget' : ''}`}>
+      <div className="expense-budget-head">
+        <h4 className="expense-budget-title">
+          <Wallet size={17} color="var(--primary)" /> Presupuesto vs gasto real
+        </h4>
+        <button className="btn btn-secondary btn-sm" onClick={onOpenCalc}>
+          <Calculator size={14} /> Estimar
+        </button>
+      </div>
       {overBudget && (
         <div className="expense-budget-alert">
           <AlertTriangle size={18} />
@@ -529,6 +538,7 @@ export default function ExpensesTab({ trip }) {
   const [sortBy, setSortBy] = useState('date-desc');
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showCalc, setShowCalc] = useState(false);
 
   const { addExpense, updateExpense, deleteExpense } = useTripStore();
   const saveStatus = useTripStore(s => s.saveStatus);
@@ -632,7 +642,7 @@ export default function ExpensesTab({ trip }) {
 
   return (
     <div className="expenses-container">
-      <BudgetPanel trip={trip} totalExpenses={totalExpenses} />
+      <BudgetPanel trip={trip} totalExpenses={totalExpenses} onOpenCalc={() => setShowCalc(true)} />
       {expenses.length > 0 && <ChartsSection expenses={expenses} trip={trip} />}
 
       {/* Participantes — si hay 2+, también mostramos liquidación */}
@@ -849,6 +859,8 @@ export default function ExpensesTab({ trip }) {
           )}
         </Modal>
       )}
+
+      {showCalc && <BudgetCalculator trip={trip} onClose={() => setShowCalc(false)} />}
     </div>
   );
 }

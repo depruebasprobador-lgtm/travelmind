@@ -4955,3 +4955,319 @@ ul, ol { list-style: none; }
     justify-content: center;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   París Ready v1 — Centro de mando, plantillas, modo hoy y gasto rápido
+   Componentes: TripPrepPanel, TemplateModal, DayPlanTab (barra + hueco libre),
+   ExpensesTab (cabecera presupuesto). Todo theme-aware y protegido a 375px.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Centro de mando (TripPrepPanel) ──────────────────────────────────────── */
+.prep-panel {
+  border-radius: var(--radius-lg, 14px);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  padding: 18px 20px;
+  margin-bottom: 22px;
+  box-shadow: var(--shadow-sm);
+  border-left: 4px solid var(--primary);
+}
+.prep-panel--ongoing { border-left-color: #10B981; }
+.prep-panel--upcoming { border-left-color: #0EA5E9; }
+
+.prep-panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.prep-panel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  padding: 3px 10px;
+  border-radius: var(--radius-full, 999px);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.prep-panel--ongoing .prep-panel-badge { background: rgba(16,185,129,0.14); color: #059669; }
+.prep-panel--upcoming .prep-panel-badge { background: rgba(14,165,233,0.14); color: #0284C7; }
+.prep-panel-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.prep-panel-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.prep-status-icon.ok { color: var(--success); }
+.prep-status-icon.warn { color: var(--warning, #F59E0B); }
+.prep-panel-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.prep-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.prep-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: var(--radius-full, 999px);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: default;
+}
+button.prep-chip { cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+button.prep-chip:hover { background: var(--bg-tertiary); border-color: var(--primary); }
+.prep-chip.ok { background: rgba(16,185,129,0.10); border-color: rgba(16,185,129,0.35); color: #059669; }
+.prep-chip.warn { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.4); color: #B45309; }
+
+.prep-pending-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.prep-pending-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.prep-pending-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--warning, #F59E0B);
+  flex-shrink: 0;
+}
+.prep-pending-more { font-size: 0.78rem; color: var(--text-tertiary); font-style: italic; }
+
+.prep-budget { margin-bottom: 14px; }
+.prep-budget-track {
+  height: 7px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--bg-tertiary);
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+.prep-budget-fill { height: 100%; border-radius: var(--radius-full, 999px); transition: width 0.4s ease; }
+.prep-budget-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.prep-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.prep-action-main { display: inline-flex; align-items: center; gap: 6px; }
+.prep-action { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ── Modal de plantillas (TemplateModal) ──────────────────────────────────── */
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.tpl-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 10px);
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.tpl-card:hover { border-color: var(--primary-light, #818CF8); }
+.tpl-card.active { border-color: var(--primary); background: rgba(99,102,241,0.08); }
+.tpl-card-emoji { font-size: 1.3rem; flex-shrink: 0; }
+.tpl-card-name { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
+
+.tpl-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}
+
+.tpl-summary {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 10px);
+  padding: 12px 14px;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tpl-summary-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+.tpl-muted { color: var(--text-tertiary); }
+.tpl-day-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px dashed var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tpl-day-list li {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tpl-day-tag {
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 999px);
+  flex-shrink: 0;
+}
+.tpl-safe-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  margin: 10px 0 0;
+}
+
+/* ── DayPlanTab: barra "durante el viaje" ─────────────────────────────────── */
+.dayplan-cmdbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+  color: #fff;
+  border-radius: var(--radius-lg, 14px);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 6px 18px rgba(79,70,229,0.18);
+}
+.dayplan-cmdbar-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1rem;
+}
+.dayplan-cmdbar-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.2);
+  padding: 3px 9px;
+  border-radius: var(--radius-full, 999px);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.dayplan-cmdbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.dayplan-cmdbar-actions .btn-secondary {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+.dayplan-cmdbar-actions .btn-secondary:hover { background: rgba(255,255,255,0.28); }
+.dayplan-cmdbar-actions .btn-primary { background: #fff; color: var(--primary, #4F46E5); }
+
+/* ── DayPlanTab: hueco libre ──────────────────────────────────────────────── */
+.dayplan-free {
+  text-align: center;
+  padding: 32px 20px;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-lg, 14px);
+  margin-bottom: 20px;
+}
+.dayplan-free-emoji { font-size: 2.4rem; margin-bottom: 6px; }
+.dayplan-free-title { margin: 0 0 6px; font-size: 1.05rem; font-weight: 700; color: var(--text-primary); }
+.dayplan-free-text {
+  margin: 0 auto 14px;
+  max-width: 360px;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+.dayplan-free-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ── ExpensesTab: cabecera presupuesto ────────────────────────────────────── */
+.expense-budget-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.expense-budget-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* ── Protección móvil (≤400px) ────────────────────────────────────────────── */
+@media (max-width: 400px) {
+  .prep-panel { padding: 16px 14px; }
+  .prep-panel-title { font-size: 1.05rem; }
+  .prep-actions { flex-direction: column; }
+  .prep-actions .btn { width: 100%; justify-content: center; }
+  .tpl-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .dayplan-cmdbar { padding: 10px 12px; }
+  .dayplan-cmdbar-info { font-size: 0.9rem; }
+  .dayplan-cmdbar-actions { width: 100%; }
+  .dayplan-cmdbar-actions .btn { flex: 1; justify-content: center; }
+  .dayplan-free { padding: 24px 14px; }
+  .dayplan-free-actions .btn { width: 100%; justify-content: center; }
+}

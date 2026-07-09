@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plane, Calendar, Clock, MapPin, ListChecks, ArrowRight } from 'lucide-react';
+import { Plane, Calendar, Clock, MapPin, ListChecks, ArrowRight, Zap } from 'lucide-react';
 import useTripStore from '../data/store';
+import QuickExpense from './trip/QuickExpense';
 import { todayISO, formatDate, formatDateShort } from '../utils/helpers';
 import {
   findOngoingTrip,
@@ -16,30 +17,28 @@ import {
  * Widget destacado en Dashboard:
  *   - Si hay viaje en curso → tarjeta "EN CURSO" con día X de Y y próxima
  *     actividad de hoy.
- *   - Si no hay en curso pero hay próximo en ≤7 días → tarjeta "PRÓXIMO
+ *   - Si no hay en curso pero hay próximo en ≤14 días → tarjeta "PRÓXIMO
  *     VIAJE" con cuenta atrás y checklist pendiente.
  *   - Si no hay nada → renderiza null (no ensucia el Dashboard).
  *
- * Es 100% lectura: no muta el store ni persiste nada.
+ * Es 100% lectura salvo el gasto rápido que dispara el propio usuario.
  */
 export default function TodayTripWidget() {
   const trips = useTripStore(s => s.trips);
   const navigate = useNavigate();
+  const [showExpense, setShowExpense] = useState(false);
   const today = todayISO();
   const now = nowHHMM();
 
-  // Sólo recalculamos cuando cambia la lista de trips. `today` y `now`
-  // son strings derivados del momento del render — basta con depender
-  // de la longitud y los ids para detectar cambios reales.
   const ongoing = useMemo(() => findOngoingTrip(trips, today), [trips, today]);
   const upcoming = useMemo(
-    () => (ongoing ? null : findUpcomingTrip(trips, today, 7)),
+    () => (ongoing ? null : findUpcomingTrip(trips, today, 14)),
     [trips, today, ongoing],
   );
 
   if (!ongoing && !upcoming) return null;
 
-  // ── Viaje en curso ─────────────────────────────────────────────────────
+  // ── Viaje en curso ──
   if (ongoing) {
     const progress = getTripDayProgress(ongoing, today);
     const todayInfo = getTodayActivitiesInfo(ongoing, today, now);
@@ -102,16 +101,20 @@ export default function TodayTripWidget() {
           </button>
           <button
             className="btn btn-secondary today-widget-cta-secondary"
-            onClick={() => navigate(`/trip/${ongoing.id}`)}
+            onClick={() => setShowExpense(true)}
           >
-            Ver viaje
+            <Zap size={14} /> Gasto rápido
           </button>
         </div>
+
+        {showExpense && (
+          <QuickExpense trip={ongoing} onClose={() => setShowExpense(false)} />
+        )}
       </section>
     );
   }
 
-  // ── Próximo viaje en ≤7 días ───────────────────────────────────────────
+  // ── Próximo viaje en ≤14 días ──
   const { trip, daysAway } = upcoming;
   const checklistPending = getChecklistPending(trip);
   const daysLabel =

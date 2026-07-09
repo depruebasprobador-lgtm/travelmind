@@ -9,7 +9,9 @@ import {
 } from 'lucide-react';
 import useTripStore from '../../data/store';
 import { formatDate, todayISO, normalizeItinerary } from '../../utils/helpers';
+import { getTripPhase, getTripDayProgress } from '../../utils/tripStatus';
 import EmptyState from '../EmptyState';
+import QuickExpense from './QuickExpense';
 
 // ── Leaflet marker fix ─────────────────────────────────────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
@@ -74,8 +76,14 @@ const MARKER_COLORS = [
 ];
 
 // ── Componente principal ───────────────────────────────────────────────────
-export default function DayPlanTab({ trip }) {
+export default function DayPlanTab({ trip, onNavigateTab }) {
   const { toggleActivityComplete } = useTripStore();
+  const [showExpense, setShowExpense] = useState(false);
+
+  // Fase del viaje respecto a hoy (para el modo "durante el viaje").
+  const phase = getTripPhase(trip);
+  const ongoing = phase === 'ongoing';
+  const dayProgress = ongoing ? getTripDayProgress(trip) : null;
   // Siempre ordenado cronológicamente — el array persistido puede venir
   // desordenado si se importó de un export antiguo.
   const itinerary = useMemo(
@@ -194,6 +202,26 @@ export default function DayPlanTab({ trip }) {
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto' }}>
+
+      {/* Barra "durante el viaje" */}
+      {ongoing && dayProgress && (
+        <div className="dayplan-cmdbar">
+          <div className="dayplan-cmdbar-info">
+            <span className="dayplan-cmdbar-badge"><Zap size={12} /> EN CURSO</span>
+            <strong>Día {dayProgress.dayNumber} de {dayProgress.totalDays}</strong>
+          </div>
+          <div className="dayplan-cmdbar-actions">
+            <button className="btn btn-sm btn-primary" onClick={() => setShowExpense(true)}>
+              <Zap size={13} /> Gasto rápido
+            </button>
+            {onNavigateTab && (
+              <button className="btn btn-sm btn-secondary" onClick={() => onNavigateTab('checklist')}>
+                <CheckCircle2 size={13} /> Checklist
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Header del día ─────────────────────────────────────────── */}
       <div className="card" style={{ padding: '16px 20px', marginBottom: 16 }}>
@@ -339,11 +367,25 @@ export default function DayPlanTab({ trip }) {
 
       {/* ── Lista de actividades ───────────────────────────────────── */}
       {activities.length === 0 ? (
-        <EmptyState
-          icon={<CalendarDays size={32} />}
-          title="Sin actividades"
-          description="No hay actividades planificadas para este día. Añádelas desde la pestaña Itinerario."
-        />
+        <div className="dayplan-free">
+          <div className="dayplan-free-emoji">🌤️</div>
+          <h4 className="dayplan-free-title">Hueco para improvisar</h4>
+          <p className="dayplan-free-text">
+            {isToday
+              ? 'Hoy no hay nada planificado. Disfruta sin prisas, o añade algo si te apetece.'
+              : 'Este día está libre. Perfecto para improvisar o dejarlo abierto.'}
+          </p>
+          <div className="dayplan-free-actions">
+            {onNavigateTab && (
+              <button className="btn btn-secondary btn-sm" onClick={() => onNavigateTab('itinerary')}>
+                <CalendarDays size={14} /> Planear en Itinerario
+              </button>
+            )}
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowExpense(true)}>
+              <Zap size={14} /> Añadir gasto
+            </button>
+          </div>
+        </div>
       ) : (
         <div style={{ marginBottom: 20 }}>
           {activities.map((act, idx) => {
@@ -538,6 +580,8 @@ export default function DayPlanTab({ trip }) {
           Para ver el mapa del día, asocia los lugares de las actividades con lugares guardados en la pestaña "Lugares".
         </div>
       )}
+
+      {showExpense && <QuickExpense trip={trip} onClose={() => setShowExpense(false)} />}
     </div>
   );
 }

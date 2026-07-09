@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Edit3, Copy, Archive, Trash2, ArrowLeft, FileText } from 'lucide-react';
+import { Edit3, Copy, Archive, Trash2, ArrowLeft, FileText, Sparkles } from 'lucide-react';
 import useTripStore from '../data/store';
 import StatusBadge from '../components/StatusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -15,6 +15,8 @@ import MapTab from '../components/trip/MapTab';
 import ChecklistTab from '../components/trip/ChecklistTab';
 import DayPlanTab from '../components/trip/DayPlanTab';
 import RecommendationsTab from '../components/trip/RecommendationsTab';
+import TripPrepPanel from '../components/trip/TripPrepPanel';
+import TemplateModal from '../components/trip/TemplateModal';
 
 const TABS = [
   { id: 'dayplan',         label: '📅 Plan del día' },
@@ -35,6 +37,7 @@ export default function TripDetail() {
   const [activeTab, setActiveTab] = useState('itinerary');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tabInitialized, setTabInitialized] = useState(false);
+  const [showTemplate, setShowTemplate] = useState(false);
 
   const loadTrips = useTripStore(s => s.loadTrips);
   const loadTrip = useTripStore(s => s.loadTrip);
@@ -97,7 +100,7 @@ export default function TripDetail() {
 
   const renderTab = () => {
     switch (activeTab) {
-      case 'dayplan': return <DayPlanTab trip={trip} />;
+      case 'dayplan': return <DayPlanTab trip={trip} onNavigateTab={setActiveTab} />;
       case 'itinerary': return <ItineraryTab trip={trip} />;
       case 'accommodation': return <AccommodationTab trip={trip} />;
       case 'transport': return <TransportTab trip={trip} />;
@@ -132,6 +135,8 @@ export default function TripDetail() {
               <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}
                 onClick={() => navigate(`/trip/${id}/edit`)}><Edit3 size={14} /> Editar</button>
               <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}
+                onClick={() => setShowTemplate(true)}><Sparkles size={14} /> Plantilla</button>
+              <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}
                 onClick={handleDuplicate}><Copy size={14} /> Duplicar</button>
               <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}
                 onClick={handleArchive}><Archive size={14} /> {trip.archived ? 'Desarchivar' : 'Archivar'}</button>
@@ -143,6 +148,8 @@ export default function TripDetail() {
           </div>
         </div>
       </div>
+
+      <TripPrepPanel trip={trip} onNavigateTab={setActiveTab} />
 
       <div className="tabs" style={{ marginBottom: 24 }}>
         {TABS.map(tab => (
@@ -158,6 +165,10 @@ export default function TripDetail() {
           title="Eliminar viaje"
           message={`¿Estás seguro de que quieres eliminar "${trip.destination}"? Esta acción no se puede deshacer.`}
           danger onConfirm={handleDelete} onCancel={() => setConfirmDelete(false)} />
+      )}
+
+      {showTemplate && (
+        <TemplateModal trip={trip} onClose={() => setShowTemplate(false)} />
       )}
     </div>
   );
