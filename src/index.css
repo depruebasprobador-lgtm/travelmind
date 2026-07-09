@@ -5271,3 +5271,165 @@ button.prep-chip:hover { background: var(--bg-tertiary); border-color: var(--pri
   .dayplan-free { padding: 24px 14px; }
   .dayplan-free-actions .btn { width: 100%; justify-content: center; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   París Shield v1 — fiabilidad: estados de carga, copia local, modo emergencia
+   y Datos clave. Theme-aware y protegido a 375px.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Estados de carga (loading / error) ───────────────────────────────────── */
+.load-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 40px 24px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg, 14px);
+  margin: 8px 0 24px;
+}
+.load-state h3 { margin: 4px 0 0; font-size: 1.15rem; color: var(--text-primary); }
+.load-state p { margin: 0; max-width: 460px; color: var(--text-secondary); font-size: 0.9rem; }
+.load-state--error { border-color: rgba(245,158,11,0.4); }
+.load-state-icon { color: var(--warning, #F59E0B); }
+.load-state-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
+.load-state-hint { font-size: 0.78rem; color: var(--text-tertiary); margin-top: 2px; }
+
+.load-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary);
+  animation: tm-spin 0.8s linear infinite;
+}
+@keyframes tm-spin { to { transform: rotate(360deg); } }
+
+/* ── Banner de copia local (Dashboard) ────────────────────────────────────── */
+.snapshot-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.4);
+  color: #B45309;
+  border-radius: var(--radius-md, 10px);
+  padding: 10px 14px;
+  margin-bottom: 20px;
+  font-size: 0.85rem;
+}
+.snapshot-banner span { flex: 1; min-width: 180px; }
+.snapshot-banner-btn {
+  background: #B45309;
+  color: #fff;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+/* ── Banner de modo emergencia (TripDetail) ───────────────────────────────── */
+.emergency-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: linear-gradient(135deg, #B45309 0%, #92400E 100%);
+  color: #fff;
+  border-radius: var(--radius-lg, 14px);
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  box-shadow: 0 6px 18px rgba(180,83,9,0.22);
+}
+.emergency-banner-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 180px; }
+.emergency-banner-text strong { font-size: 0.92rem; letter-spacing: 0.02em; }
+.emergency-banner-text span { font-size: 0.82rem; opacity: 0.95; }
+.emergency-banner-btn {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.35);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.emergency-banner-btn:hover { background: rgba(255,255,255,0.3); }
+
+/* ── Accesos a Datos clave (KeyInfoAccess) ────────────────────────────────── */
+.keyinfo-access { margin-top: 12px; }
+.keyinfo-access-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.keyinfo-access-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.keyinfo-missing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--warning, #B45309);
+  margin: 8px 0 0;
+}
+
+/* ── Editor Datos clave (KeyInfoModal) ────────────────────────────────────── */
+.keyinfo-hint { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 14px; }
+.keyinfo-group {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 10px);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--bg-secondary);
+}
+.keyinfo-group-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.keyinfo-readonly-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.4);
+  color: #B45309;
+  border-radius: var(--radius-md, 10px);
+  padding: 9px 12px;
+  font-size: 0.82rem;
+  margin-bottom: 12px;
+}
+
+/* ── KeyInfoAccess dentro del widget en curso (fondo oscuro) ───────────────── */
+.today-widget-keyinfo { margin-top: 12px; }
+.today-widget-keyinfo .keyinfo-access-btn {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+.today-widget-keyinfo .keyinfo-access-btn:hover { background: rgba(255,255,255,0.28); }
+.today-widget-keyinfo .keyinfo-missing { color: #FDE68A; }
+
+/* ── Protección móvil (≤400px) ────────────────────────────────────────────── */
+@media (max-width: 400px) {
+  .load-state { padding: 32px 16px; }
+  .load-state-actions { flex-direction: column; width: 100%; }
+  .load-state-actions .btn { width: 100%; justify-content: center; }
+  .snapshot-banner, .emergency-banner { padding: 10px 12px; }
+  .snapshot-banner-btn, .emergency-banner-btn { width: 100%; justify-content: center; }
+  .keyinfo-access-row { flex-direction: column; }
+  .keyinfo-access-row .keyinfo-access-btn { width: 100%; justify-content: center; }
+}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Plane, Globe, MapPin, Wallet, Archive, ChevronDown } from 'lucide-react';
+import { Plus, Plane, Globe, MapPin, Wallet, Archive, ChevronDown, AlertTriangle, RefreshCw } from 'lucide-react';
 import useTripStore from '../data/store';
 import TripCard from '../components/TripCard';
 import SearchBar from '../components/SearchBar';
@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState';
 import TodayTripWidget from '../components/TodayTripWidget';
 import { useToast } from '../components/Toast';
 import { formatCurrency, compareISODates } from '../utils/helpers';
+import { getTripsSnapshot, getSnapshotAgeLabel } from '../utils/localTripBackup';
 
 const SORT_OPTIONS = [
   { value: 'recent', label: 'Más recientes' },
@@ -44,11 +45,26 @@ export default function Dashboard() {
   const trips = useTripStore(s => s.trips);
   const getFilteredTrips = useTripStore(s => s.getFilteredTrips);
   const archiveTrip = useTripStore(s => s.archiveTrip);
+  const openLocalSnapshot = useTripStore(s => s.openLocalSnapshot);
+  const loadState = useTripStore(s => s.loadState);
+  const usingSnapshot = useTripStore(s => s.usingSnapshot);
   const saveStatus = useTripStore(s => s.saveStatus);
   const isSaving = saveStatus === 'saving';
 
   const [sort, setSort] = useState('recent');
   const [showArchived, setShowArchived] = useState(false);
+  const [snapMeta, setSnapMeta] = useState(() => getTripsSnapshot());
+
+  const handleRetry = async () => {
+    const r = await loadTrips();
+    if (r?.ok) { setSnapMeta(getTripsSnapshot()); toast('Viajes cargados', 'success'); }
+  };
+
+  const handleOpenSnapshot = () => {
+    const r = openLocalSnapshot();
+    if (r?.ok) toast('Mostrando la última copia guardada', 'info');
+    else toast('No hay copia local disponible todavía', 'error');
+  };
 
   useEffect(() => { loadTrips(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -67,6 +83,10 @@ export default function Dashboard() {
   const ideas = sortTrips(filtered.filter(t => t.status === 'idea'), sort);
   const archived = trips.filter(t => t.archived);
 
+  // Estados de carga inequívocos (evitan el empty state alegre si hay error).
+  const showLoading = loadState === 'loading' && trips.length === 0;
+  const showError = loadState === 'error' && activeTrips.length === 0 && ideas.length === 0;
+
   const allActive = trips.filter(t => !t.archived);
   const countries = [...new Set(allActive.map(t => t.country).filter(Boolean))];
   const totalSpent = allActive.reduce((s, t) =>
@@ -80,9 +100,21 @@ export default function Dashboard() {
         <p>Planifica, organiza y disfruta tus viajes</p>
       </div>
 
-      {/* Widget destacado: viaje en curso o próximo (≤7 días). Si no hay nada,
-          este componente devuelve null y el Dashboard queda igual que antes. */}
+      {/* Widget destacado: viaje en curso o próximo (≤14 días). */}
       <TodayTripWidget />
+
+      {usingSnapshot && (
+        <div className="snapshot-banner">
+          <Archive size={16} />
+          <span>
+            Mostrando la última copia guardada{snapMeta ? ` · ${getSnapshotAgeLabel(snapMeta.savedAt)}` : ''}.
+            Puede que no esté 100% al día.
+          </span>
+          <button className="btn btn-sm snapshot-banner-btn" onClick={handleRetry}>
+            <RefreshCw size={13} /> Reintentar
+          </button>
+        </div>
+      )}
 
       <div className="stats-grid" style={{ marginBottom: 32 }}>
         <div className="stat-card">
@@ -145,8 +177,32 @@ export default function Dashboard() {
         <DataActions />
       </div>
 
-      {/* Active trips */}
-      {activeTrips.length > 0 ? (
+      {/* Estados: cargando / error / normal / vacío */}
+      {showLoading ? (
+        <div className="load-state load-state--loading">
+          <div className="load-spinner" />
+          <p>Cargando tus viajes…</p>
+        </div>
+      ) : showError ? (
+        <div className="load-state load-state--error">
+          <AlertTriangle size={34} className="load-state-icon" />
+          <h3>No se pudieron cargar los viajes</h3>
+          <p>Puede ser la conexión, Supabase pausado o un problema temporal. Tranquilo: tus viajes no se han borrado.</p>
+          <div className="load-state-actions">
+            <button className="btn btn-primary" onClick={handleRetry} disabled={loadState === 'loading'}>
+              <RefreshCw size={16} /> Reintentar
+            </button>
+            {snapMeta && (
+              <button className="btn btn-secondary" onClick={handleOpenSnapshot}>
+                <Archive size={16} /> Abrir última copia guardada
+              </button>
+            )}
+          </div>
+          {snapMeta && (
+            <p className="load-state-hint">Copia local disponible · {getSnapshotAgeLabel(snapMeta.savedAt)}</p>
+          )}
+        </div>
+      ) : activeTrips.length > 0 ? (
         <>
           <div className="section-header">
             <h2>Mis Viajes</h2>

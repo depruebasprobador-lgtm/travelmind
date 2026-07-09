@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as storage from './storage.js';
+import * as backup from '../utils/localTripBackup.js';
 import {
   generateId,
   syncDaysWithDates,
@@ -32,6 +33,7 @@ const ERROR_MESSAGES = {
   participant:       'No se pudo guardar el participante.',
   checklist:         'No se pudo guardar la checklist.',
   budgetEstimation:  'No se pudo guardar la estimación de presupuesto.',
+  keyInfo:           'No se pudieron guardar los datos clave.',
   importData:        'No se pudo importar los datos.',
   loadTrips:         'No se pudieron cargar los viajes. Revisa tu conexión e inténtalo de nuevo.',
 };
@@ -42,6 +44,8 @@ const useTripStore = create((set, get) => ({
   filters: { search: '', status: '', country: '' },
   saveStatus: 'idle', // idle | saving | saved | error
   saveError: null,    // { id, message, operation } cuando falla la persistencia
+  loadState: 'idle',  // idle | loading | loaded | error | snapshot
+  usingSnapshot: false, // true cuando se muestra la última copia local (modo emergencia)
 
   /**
    * Pisa el toast de error actual (o lo ignora si ya no aplica). El
@@ -96,9 +100,12 @@ const useTripStore = create((set, get) => ({
   // Si todo va bien, actualizamos `trips`. Si la BD está vacía, dejamos
   // `trips: []` (estado legítimo, no es un error).
   loadTrips: async () => {
+    set({ loadState: 'loading' });
     try {
       const trips = await storage.getTrips();
-      set({ trips });
+      set({ trips, loadState: 'loaded', usingSnapshot: false });
+      // Copia local buena: sólo tras carga remota OK.
+      backup.saveTripsSnapshot(trips);
       return { ok: true, trips };
     } catch (e) {
       console.error('[TravelMind] loadTrips falló:', e);
@@ -107,15 +114,56 @@ const useTripStore = create((set, get) => ({
         message: ERROR_MESSAGES.loadTrips,
         operation: 'loadTrips',
       };
-      set({ saveError: errorObj });
+      // No tocamos `trips`: lo que hubiera en memoria se conserva.
+      set({ saveError: errorObj, loadState: 'error' });
       return { ok: false, error: e };
     }
+  },
+
+  // ── Snapshot local (modo emergencia read-only) ───────────────────────────
+  // Carga la última copia buena de localStorage cuando la carga remota falla.
+  // Marca cada viaje con banderas internas NO persistentes.
+  openLocalSnapshot: () => {
+    const snap = backup.getTripsSnapshot();
+    if (!snap || !Array.isArray(snap.data) || snap.data.length === 0) {
+      return { ok: false };
+    }
+    const marked = snap.data.map(t => ({
+      ...t, __isLocalSnapshot: true, __snapshotSavedAt: snap.savedAt,
+    }));
+    set({ trips: marked, loadState: 'snapshot', usingSnapshot: true });
+    return { ok: true, count: marked.length, savedAt: snap.savedAt };
+  },
+
+  // Asegura que el viaje `id` esté disponible desde copia local (individual o
+  // desde la lista). Para entrar directo a /trip/:id con Supabase caído.
+  openLocalTripSnapshot: (id) => {
+    let data = null, savedAt = null;
+    const indiv = backup.getTripSnapshot(id);
+    if (indiv) { data = indiv.data; savedAt = indiv.savedAt; }
+    else {
+      const list = backup.getTripsSnapshot();
+      const found = list?.data?.find(t => t.id === id);
+      if (found) { data = found; savedAt = list.savedAt; }
+    }
+    if (!data) return { ok: false };
+    const marked = { ...data, __isLocalSnapshot: true, __snapshotSavedAt: savedAt };
+    const others = get().trips.filter(t => t.id !== id);
+    set({
+      trips: [marked, ...others],
+      currentTrip: marked,
+      loadState: 'snapshot',
+      usingSnapshot: true,
+    });
+    return { ok: true, savedAt };
   },
 
   loadTrip: async (id) => {
     try {
       const trip = await storage.getTrip(id);
       set({ currentTrip: trip });
+      // Copia local del viaje individual: sólo tras carga remota OK.
+      if (trip) backup.saveTripSnapshot(trip);
       return trip;
     } catch (e) {
       console.error('[TravelMind] loadTrip falló:', e);
@@ -201,7 +249,12 @@ const useTripStore = create((set, get) => ({
       finalUpdates.itinerary = normalizeItinerary(updates.itinerary);
     }
 
-    const updated = { ...trip, ...finalUpdates, updatedAt: new Date().toISOString() };
+    const merged = { ...trip, ...finalUpdates, updatedAt: new Date().toISOString() };
+    // Nunca persistimos banderas internas (p.ej. __isLocalSnapshot) en el JSONB.
+    const updated = {};
+    for (const k of Object.keys(merged)) {
+      if (!k.startsWith('__')) updated[k] = merged[k];
+    }
     const r = await get()._persist(
       storage.saveTrip(updated),
       { operation: options.operation || 'updateTrip' },
@@ -668,6 +721,11 @@ const useTripStore = create((set, get) => ({
   // ── Budget Estimation ─────────────────────────────────────────────────────
   saveBudgetEstimation: async (tripId, estimation) => {
     return get().updateTrip(tripId, { budgetEstimation: estimation }, { operation: 'budgetEstimation' });
+  },
+
+  // ── Datos clave del viaje (payload JSONB existente, sin tabla nueva) ──────
+  saveKeyInfo: async (tripId, keyInfo) => {
+    return get().updateTrip(tripId, { keyInfo }, { operation: 'keyInfo' });
   },
 
   // ── Filters ──────────────────────────────────────────────────────────────

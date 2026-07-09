@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Edit3, Copy, Archive, Trash2, ArrowLeft, FileText, Sparkles } from 'lucide-react';
+import { Edit3, Copy, Archive, Trash2, ArrowLeft, FileText, Sparkles, KeyRound, RefreshCw, AlertTriangle, ShieldAlert } from 'lucide-react';
 import useTripStore from '../data/store';
 import StatusBadge from '../components/StatusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
-import { formatDate, formatCurrency, downloadFile } from '../utils/helpers';
+import { formatDate, formatCurrency, downloadFile, todayISO } from '../utils/helpers';
 import ItineraryTab from '../components/trip/ItineraryTab';
 import AccommodationTab from '../components/trip/AccommodationTab';
 import TransportTab from '../components/trip/TransportTab';
@@ -17,6 +17,8 @@ import DayPlanTab from '../components/trip/DayPlanTab';
 import RecommendationsTab from '../components/trip/RecommendationsTab';
 import TripPrepPanel from '../components/trip/TripPrepPanel';
 import TemplateModal from '../components/trip/TemplateModal';
+import KeyInfoModal from '../components/trip/KeyInfoModal';
+import { getTripSnapshot, getSnapshotAgeLabel } from '../utils/localTripBackup';
 
 const TABS = [
   { id: 'dayplan',         label: '📅 Plan del día' },
@@ -38,6 +40,8 @@ export default function TripDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tabInitialized, setTabInitialized] = useState(false);
   const [showTemplate, setShowTemplate] = useState(false);
+  const [showKeyInfo, setShowKeyInfo] = useState(false);
+  const [triedSnapshot, setTriedSnapshot] = useState(false);
 
   const loadTrips = useTripStore(s => s.loadTrips);
   const loadTrip = useTripStore(s => s.loadTrip);
@@ -46,6 +50,8 @@ export default function TripDetail() {
   const duplicateTrip = useTripStore(s => s.duplicateTrip);
   const archiveTrip = useTripStore(s => s.archiveTrip);
   const exportTripData = useTripStore(s => s.exportTripData);
+  const openLocalTripSnapshot = useTripStore(s => s.openLocalTripSnapshot);
+  const loadState = useTripStore(s => s.loadState);
 
   // Fix: ensure trips are loaded when navigating directly to this URL
   useEffect(() => {
@@ -65,7 +71,50 @@ export default function TripDetail() {
     setTabInitialized(true);
   }, [trip, tabInitialized]);
 
-  if (!trip) return <div className="page-container"><p>Viaje no encontrado</p></div>;
+  // Si la carga remota falla y no tenemos el viaje, probamos la copia local.
+  useEffect(() => {
+    if (!trip && loadState === 'error' && !triedSnapshot) {
+      setTriedSnapshot(true);
+      openLocalTripSnapshot(id);
+    }
+  }, [trip, loadState, triedSnapshot, id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!trip) {
+    if (loadState === 'loading') {
+      return (
+        <div className="page-container">
+          <div className="load-state load-state--loading">
+            <div className="load-spinner" />
+            <p>Cargando el viaje…</p>
+          </div>
+        </div>
+      );
+    }
+    if (loadState === 'error') {
+      const snap = getTripSnapshot(id);
+      return (
+        <div className="page-container">
+          <div className="load-state load-state--error">
+            <AlertTriangle size={34} className="load-state-icon" />
+            <h3>No se pudo cargar el viaje</h3>
+            <p>Puede ser la conexión o que Supabase esté pausado. Tranquilo: no se ha borrado nada.</p>
+            <div className="load-state-actions">
+              <button className="btn btn-primary" onClick={() => { loadTrips(); loadTrip(id); }}>
+                <RefreshCw size={16} /> Reintentar
+              </button>
+              {snap && (
+                <button className="btn btn-secondary" onClick={() => openLocalTripSnapshot(id)}>
+                  <Archive size={16} /> Abrir última copia guardada
+                </button>
+              )}
+            </div>
+            {snap && <p className="load-state-hint">Copia local · {getSnapshotAgeLabel(snap.savedAt)}</p>}
+          </div>
+        </div>
+      );
+    }
+    return <div className="page-container"><p>Viaje no encontrado</p></div>;
+  }
 
   const totalSpent = (trip.expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
 
@@ -90,11 +139,36 @@ export default function TripDetail() {
     toast(wasArchived ? 'Viaje desarchivado' : 'Viaje archivado', 'success');
   };
 
+  const slugify = (str) =>
+    (str || 'viaje')
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'viaje';
+
   const handleExportJSON = () => {
-    const data = exportTripData(id);
-    if (data) {
-      downloadFile(data, `travelmind-${trip.destination.toLowerCase().replace(/\s+/g, '-')}.json`);
-      toast('Viaje exportado', 'success');
+    try {
+      const raw = exportTripData(id);
+      if (!raw || !Array.isArray(raw.trips) || raw.trips.length === 0) {
+        toast('No se pudo exportar la copia', 'error');
+        return;
+      }
+      // Limpiamos banderas internas (p.ej. __isLocalSnapshot) del export.
+      const clean = {
+        ...raw,
+        trips: raw.trips.map(t => {
+          const o = {};
+          for (const k of Object.keys(t)) if (!k.startsWith('__')) o[k] = t[k];
+          return o;
+        }),
+      };
+      const slug = slugify(trip.destination || trip.city);
+      const datePart = trip.startDate || todayISO();
+      downloadFile(clean, `travelmind-${slug}-${datePart}.json`);
+      toast('Copia del viaje exportada', 'success');
+    } catch (e) {
+      console.error('[TravelMind] export copia falló:', e);
+      toast('No se pudo exportar la copia', 'error');
     }
   };
 
@@ -119,6 +193,22 @@ export default function TripDetail() {
         <ArrowLeft size={18} /> Dashboard
       </button>
 
+      {trip.__isLocalSnapshot && (
+        <div className="emergency-banner">
+          <ShieldAlert size={18} />
+          <div className="emergency-banner-text">
+            <strong>Modo emergencia</strong>
+            <span>
+              Estás viendo la última copia guardada{trip.__snapshotSavedAt ? ` · ${getSnapshotAgeLabel(trip.__snapshotSavedAt)}` : ''}.
+              Puede que algunos cambios no se guarden hasta recuperar conexión.
+            </span>
+          </div>
+          <button className="btn btn-sm emergency-banner-btn" onClick={() => { loadTrips(); loadTrip(id); }}>
+            <RefreshCw size={13} /> Reintentar
+          </button>
+        </div>
+      )}
+
       <div className="trip-header">
         <div className="trip-header-bg"
           style={{ backgroundImage: trip.imageUrl ? `url(${trip.imageUrl})` : 'var(--primary-gradient)' }}>
@@ -141,7 +231,9 @@ export default function TripDetail() {
               <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}
                 onClick={handleArchive}><Archive size={14} /> {trip.archived ? 'Desarchivar' : 'Archivar'}</button>
               <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}
-                onClick={handleExportJSON}><FileText size={14} /> JSON</button>
+                onClick={() => setShowKeyInfo(true)}><KeyRound size={14} /> Datos clave</button>
+              <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}
+                onClick={handleExportJSON}><FileText size={14} /> Exportar copia</button>
               <button className="btn btn-sm" style={{ background: 'rgba(239,68,68,0.8)', color: 'white' }}
                 onClick={() => setConfirmDelete(true)}><Trash2 size={14} /> Eliminar</button>
             </div>
@@ -169,6 +261,10 @@ export default function TripDetail() {
 
       {showTemplate && (
         <TemplateModal trip={trip} onClose={() => setShowTemplate(false)} />
+      )}
+
+      {showKeyInfo && (
+        <KeyInfoModal trip={trip} onClose={() => setShowKeyInfo(false)} />
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plane, Calendar, Clock, MapPin, ListChecks, ArrowRight, Zap } from 'lucide-react';
 import useTripStore from '../data/store';
 import QuickExpense from './trip/QuickExpense';
+import KeyInfoAccess from './trip/KeyInfoAccess';
 import { todayISO, formatDate, formatDateShort } from '../utils/helpers';
 import {
   findOngoingTrip,
@@ -105,6 +106,10 @@ export default function TodayTripWidget() {
           >
             <Zap size={14} /> Gasto rápido
           </button>
+        </div>
+
+        <div className="today-widget-keyinfo">
+          <KeyInfoAccess trip={ongoing} />
         </div>
 
         {showExpense && (

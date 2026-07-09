@@ -22,6 +22,7 @@ const CATEGORIES = [
 export default function QuickExpense({ trip, onClose, onSaved }) {
   const toast = useToast();
   const addExpense = useTripStore(s => s.addExpense);
+  const isSnapshot = !!trip.__isLocalSnapshot;
 
   const participants = trip.participants || [];
   const [description, setDescription] = useState('');
@@ -37,6 +38,10 @@ export default function QuickExpense({ trip, onClose, onSaved }) {
 
   const handleSave = async () => {
     if (submitting) return;
+    if (isSnapshot) {
+      setError('Estás en modo emergencia (copia local): no se pueden guardar gastos hasta recuperar conexión.');
+      return;
+    }
     if (!description.trim()) { setError('Pon un concepto.'); return; }
     if (!amount || Number.isNaN(amt) || amt <= 0) { setError('El importe debe ser mayor que 0.'); return; }
     setError('');
@@ -69,12 +74,17 @@ export default function QuickExpense({ trip, onClose, onSaved }) {
       footer={
         <>
           <button className="btn btn-secondary" onClick={onClose} disabled={submitting}>Cancelar</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={!canSave || submitting}>
+          <button className="btn btn-primary" onClick={handleSave} disabled={!canSave || submitting || isSnapshot}>
             <Zap size={15} /> Guardar gasto
           </button>
         </>
       }
     >
+      {isSnapshot && (
+        <div className="keyinfo-readonly-note">
+          Modo emergencia: estás viendo una copia local. Guardar gastos estará disponible al recuperar conexión.
+        </div>
+      )}
       <div className="form-group">
         <label className="form-label">Concepto *</label>
         <input

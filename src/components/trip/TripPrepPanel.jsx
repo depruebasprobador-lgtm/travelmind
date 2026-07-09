@@ -7,6 +7,7 @@ import { getTripPhase, getTripDayProgress } from '../../utils/tripStatus';
 import { todayISO, diffDaysISO, formatCurrency } from '../../utils/helpers';
 import QuickExpense from './QuickExpense';
 import TemplateModal from './TemplateModal';
+import KeyInfoAccess from './KeyInfoAccess';
 
 /**
  * "Centro de mando" del viaje: bloque compacto y práctico que aparece en el
@@ -170,6 +171,8 @@ export default function TripPrepPanel({ trip, onNavigateTab }) {
           <Sparkles size={14} /> Plantilla
         </button>
       </div>
+
+      <KeyInfoAccess trip={trip} />
 
       {showExpense && <QuickExpense trip={trip} onClose={() => setShowExpense(false)} />}
       {showTemplate && <TemplateModal trip={trip} onClose={() => setShowTemplate(false)} />}

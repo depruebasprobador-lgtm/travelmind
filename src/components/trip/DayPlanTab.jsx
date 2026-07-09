@@ -12,6 +12,7 @@ import { formatDate, todayISO, normalizeItinerary } from '../../utils/helpers';
 import { getTripPhase, getTripDayProgress } from '../../utils/tripStatus';
 import EmptyState from '../EmptyState';
 import QuickExpense from './QuickExpense';
+import KeyInfoAccess from './KeyInfoAccess';
 
 // ── Leaflet marker fix ─────────────────────────────────────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
@@ -222,6 +223,8 @@ export default function DayPlanTab({ trip, onNavigateTab }) {
           </div>
         </div>
       )}
+
+      {ongoing && <KeyInfoAccess trip={trip} />}
 
       {/* ── Header del día ─────────────────────────────────────────── */}
       <div className="card" style={{ padding: '16px 20px', marginBottom: 16 }}>
